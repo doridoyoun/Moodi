@@ -13,7 +13,7 @@ import {
 } from 'lucide-react-native';
 import NotebookLayout from '../components/NotebookLayout';
 import { useMood } from '../src/context/MoodContext';
-import { moodOrder, moodPalette, notebook } from '../constants/theme';
+import { moodOrder, moodPalette, notebook, timelineSlotOverrides } from '../constants/theme';
 import {
   createEmptyChunks,
   createEmptyHourMap,
@@ -246,7 +246,11 @@ function chunkIntensityVisuals(pal, emotionId, count) {
 }
 
 function ChunkCell({ cell }) {
-  const pal = cell ? moodPalette[cell.emotionId] : null;
+  const eid = cell?.emotionId;
+  const pal =
+    cell && eid && moodPalette[eid]
+      ? { ...moodPalette[eid], ...(timelineSlotOverrides[eid] ?? {}) }
+      : null;
   const Icon = cell ? moodIcons[cell.emotionId] : null;
   const memo = cell?.memo?.trim();
   const filled = Boolean(cell && pal && Icon);

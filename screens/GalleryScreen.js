@@ -1,9 +1,9 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
   Image,
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -28,6 +29,7 @@ import {
 import { FAB, Portal } from 'react-native-paper';
 import { captureRef } from 'react-native-view-shot';
 import NotebookLayout from '../components/NotebookLayout';
+import { useMemoFont } from '../src/context/MemoFontContext';
 import { useMood } from '../src/context/MoodContext';
 import { moodOrder, moodPalette, notebook } from '../constants/theme';
 
@@ -47,6 +49,39 @@ function formatMoodiCanvasDate() {
   });
 }
 
+/** Subtle ink-like stroke; font has no bold. Shadow is slightly darker than fill color. */
+function handwrittenInkShadowForHex(hex) {
+  const h = (hex || '').trim();
+  if (!/^#([0-9a-fA-F]{6})$/.test(h)) {
+    return {
+      textShadowColor: 'rgba(28, 28, 28, 0.75)',
+      textShadowOffset: { width: 0.4, height: 0.4 },
+      textShadowRadius: 0.5,
+    };
+  }
+  const r = parseInt(h.slice(1, 3), 16);
+  const g = parseInt(h.slice(3, 5), 16);
+  const b = parseInt(h.slice(5, 7), 16);
+  const t = 0.62;
+  return {
+    textShadowColor: `rgba(${Math.round(r * t)}, ${Math.round(g * t)}, ${Math.round(b * t)}, 0.76)`,
+    textShadowOffset: { width: 0.4, height: 0.4 },
+    textShadowRadius: 0.5,
+  };
+}
+
+/**
+ * Shared handwritten memo line: ink color, subtle stroke shadow, fontFamily.
+ * Archive captions and Today's Moodi summary both use this; layout (sizes) stays local.
+ */
+function handwrittenMemoCoreStyles(inkHex, memoFontFamily) {
+  return {
+    color: inkHex,
+    ...handwrittenInkShadowForHex(inkHex),
+    ...(memoFontFamily ? { fontFamily: memoFontFamily } : {}),
+  };
+}
+
 const modalEmotionIcons = {
   happy: Smile,
   flutter: Heart,
@@ -63,17 +98,17 @@ const moodiCanvasStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: notebook.gridLine,
-    paddingTop: 16,
-    paddingBottom: 18,
+    paddingTop: 22,
+    paddingBottom: 17,
     paddingHorizontal: 12,
     alignItems: 'center',
   },
   canvasTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: notebook.ink,
     textAlign: 'center',
-    letterSpacing: 0.15,
+    letterSpacing: 0.2,
     marginBottom: 10,
   },
   gridWrap: {
@@ -119,30 +154,26 @@ const moodiCanvasStyles = StyleSheet.create({
   },
   summaryBlock: {
     width: '100%',
-    minHeight: 40,
-    marginTop: 10,
-    marginBottom: 10,
+    minHeight: 56,
+    marginTop: 12,
+    marginBottom: 12,
     paddingHorizontal: 6,
-    paddingVertical: 6,
+    paddingVertical: 8,
     justifyContent: 'center',
   },
   summaryInput: {
-    fontSize: 14,
-    fontWeight: '500',
-    fontStyle: 'italic',
-    color: '#5a6570',
+    fontSize: 22,
     textAlign: 'center',
-    lineHeight: 20,
-    minHeight: 40,
-    paddingVertical: 4,
+    lineHeight: 28,
+    letterSpacing: 0.15,
+    minHeight: 56,
+    paddingVertical: 6,
   },
   summaryTextExport: {
-    fontSize: 14,
-    fontWeight: '500',
-    fontStyle: 'italic',
-    color: '#5a6570',
+    fontSize: 22,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 28,
+    letterSpacing: 0.15,
   },
   footerMeta: {
     width: '100%',
@@ -192,6 +223,9 @@ function MoodiSlotPhoto({ item, onPress }) {
 }
 
 function TodaysMoodiCanvas({ slots, summaryText, onSummaryChange, isExport, onSlotPress }) {
+  const { memoFontFamily } = useMemoFont();
+  const summaryHandwritten = handwrittenMemoCoreStyles('#333333', memoFontFamily);
+
   return (
     <View style={moodiCanvasStyles.canvas} collapsable={false}>
       <Text style={moodiCanvasStyles.canvasTitle}>{"Today's Moodi"}</Text>
@@ -207,7 +241,9 @@ function TodaysMoodiCanvas({ slots, summaryText, onSummaryChange, isExport, onSl
       </View>
       <View style={moodiCanvasStyles.summaryBlock}>
         {isExport ? (
-          <Text style={moodiCanvasStyles.summaryTextExport}>{summaryText.trim() || ' '}</Text>
+          <Text style={[moodiCanvasStyles.summaryTextExport, summaryHandwritten]}>
+            {summaryText.trim() || ' '}
+          </Text>
         ) : (
           <TextInput
             value={summaryText}
@@ -216,7 +252,7 @@ function TodaysMoodiCanvas({ slots, summaryText, onSummaryChange, isExport, onSl
             placeholderTextColor="rgba(90, 101, 112, 0.45)"
             multiline
             maxLength={120}
-            style={moodiCanvasStyles.summaryInput}
+            style={[moodiCanvasStyles.summaryInput, summaryHandwritten]}
           />
         )}
       </View>
@@ -228,10 +264,11 @@ function TodaysMoodiCanvas({ slots, summaryText, onSummaryChange, isExport, onSl
   );
 }
 
-/** Archive 폴라로이드 전용 */
-function ArchiveMemoTimeCaption({ memo, timestamp, memoColor, timeColor }) {
+/** Archive 폴라로이드 전용 — memo 줄만 손글씨 폰트 적용 */
+function ArchiveMemoTimeCaption({ memo, timestamp, memoColor, timeColor, memoFontFamily }) {
   const line = (memo || '').trim();
   const time = formatTimeShort(timestamp);
+  const memoHandwritten = handwrittenMemoCoreStyles(memoColor, memoFontFamily);
 
   if (!line) {
     return (
@@ -244,13 +281,45 @@ function ArchiveMemoTimeCaption({ memo, timestamp, memoColor, timeColor }) {
   return (
     <View style={archiveCaptionStyles.row}>
       <Text
-        style={[archiveCaptionStyles.memo, { color: memoColor }]}
+        style={[archiveCaptionStyles.memo, memoHandwritten]}
         numberOfLines={2}
         ellipsizeMode="tail"
       >
         {line}
       </Text>
       <Text style={[archiveCaptionStyles.time, { color: timeColor }]}>{time}</Text>
+    </View>
+  );
+}
+
+function PolaroidCardInner({ item, memoFontFamily }) {
+  const eid = item.emotionId || 'happy';
+  const pal = moodPalette[eid] ?? moodPalette.happy;
+
+  return (
+    <View
+      style={[
+        styles.polaroidUnified,
+        {
+          borderColor: pal.border,
+          shadowColor: pal.border,
+        },
+      ]}
+    >
+      <View style={styles.polaroidPhotoSection}>
+        <View style={styles.polaroidArchivePhotoInner}>
+          <Image source={{ uri: item.imageUri }} style={styles.polaroidImage} resizeMode="cover" />
+        </View>
+      </View>
+      <View style={[styles.polaroidCaptionBar, { backgroundColor: pal.bg }]}>
+        <ArchiveMemoTimeCaption
+          memo={item.memo}
+          timestamp={item.timestamp}
+          memoColor={pal.ink}
+          timeColor={notebook.inkMuted}
+          memoFontFamily={memoFontFamily}
+        />
+      </View>
     </View>
   );
 }
@@ -277,9 +346,9 @@ const archiveCaptionStyles = StyleSheet.create({
   },
   memo: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: '500',
-    lineHeight: 15,
+    fontSize: 13,
+    lineHeight: 19,
+    letterSpacing: 0.15,
   },
   time: {
     fontSize: 11,
@@ -291,7 +360,9 @@ const archiveCaptionStyles = StyleSheet.create({
 
 export default function GalleryScreen() {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const isFocused = useIsFocused();
+  const { memoFontFamily } = useMemoFont();
   const {
     albumItems,
     fourSlotIds,
@@ -313,8 +384,77 @@ export default function GalleryScreen() {
   const [slotPickerVisible, setSlotPickerVisible] = useState(false);
   const [activeSlotIndex, setActiveSlotIndex] = useState(0);
 
+  /** Keyboard frame height (px) for positioning the edit modal card only; backdrop stays fixed. */
+  const [emotionModalKeyboardHeight, setEmotionModalKeyboardHeight] = useState(0);
+
+  const keyboardOpen = emotionModalKeyboardHeight > 0;
+  /** Caps card + ScrollView height so content scrolls instead of overflowing above the keyboard. */
+  const emotionModalCardMaxHeight = useMemo(() => {
+    if (!keyboardOpen) return undefined;
+    return Math.max(
+      260,
+      windowHeight - emotionModalKeyboardHeight - 8 - insets.top - insets.bottom - 20,
+    );
+  }, [keyboardOpen, emotionModalKeyboardHeight, windowHeight, insets.top, insets.bottom]);
+
   const moodiCaptureRef = useRef(null);
+  const polaroidExportRef = useRef(null);
+  const [polaroidExportItem, setPolaroidExportItem] = useState(null);
   const [savingMoodi, setSavingMoodi] = useState(false);
+
+  const savePolaroidAsImage = useCallback(async (item) => {
+    setPolaroidExportItem(item);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await new Promise((r) => setTimeout(r, 64));
+    try {
+      const perm = await MediaLibrary.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('알림', '사진을 저장하려면 갤러리 접근을 허용해 주세요.');
+        return;
+      }
+      const node = polaroidExportRef.current;
+      if (!node) {
+        Alert.alert('오류', '저장에 실패했습니다. 다시 시도해 주세요.');
+        return;
+      }
+      const uri = await captureRef(node, { format: 'png', quality: 1 });
+      await MediaLibrary.saveToLibraryAsync(uri);
+      Alert.alert('저장 완료', '폴라로이드 이미지가 저장되었습니다');
+    } catch {
+      Alert.alert('오류', '저장에 실패했습니다. 다시 시도해 주세요.');
+    } finally {
+      setPolaroidExportItem(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!emotionModalVisible) {
+      setEmotionModalKeyboardHeight(0);
+      return;
+    }
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setEmotionModalKeyboardHeight(e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setEmotionModalKeyboardHeight(0),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [emotionModalVisible]);
+
+  const promptPolaroidExport = useCallback(
+    (item) => {
+      Alert.alert('폴라로이드', '', [
+        { text: '취소', style: 'cancel' },
+        { text: '이미지로 저장', onPress: () => void savePolaroidAsImage(item) },
+      ]);
+    },
+    [savePolaroidAsImage],
+  );
 
   const saveTodaysMoodiImage = useCallback(async () => {
     if (savingMoodi) return;
@@ -498,10 +638,9 @@ export default function GalleryScreen() {
         </View>
 
         <View style={styles.sectionLabel}>
-          <Text style={styles.sectionKicker}>Four-Cut</Text>
           <Text style={styles.sectionTitle}>{"Today's Moodi"}</Text>
           <Text style={styles.sectionHint}>
-            슬롯을 눌러 앨범에서 사진·감정·메모 세트를 넣을 수 있어요
+            슬롯을 눌러 앨범에서 사진·감정을 넣을 수 있어요
           </Text>
         </View>
 
@@ -543,7 +682,6 @@ export default function GalleryScreen() {
         </View>
 
         <View style={styles.archiveHeader}>
-          <Text style={styles.sectionKicker}>Archive</Text>
           <Text style={styles.sectionTitle}>감정 폴라로이드 앨범</Text>
         </View>
 
@@ -554,7 +692,12 @@ export default function GalleryScreen() {
         ) : (
           <View style={styles.archiveGrid}>
             {albumItems.map((item) => (
-              <AlbumPolaroid key={item.id} item={item} onPress={() => openEditAlbum(item)} />
+              <AlbumPolaroid
+                key={item.id}
+                item={item}
+                onPress={() => openEditAlbum(item)}
+                onLongPress={() => promptPolaroidExport(item)}
+              />
             ))}
           </View>
         )}
@@ -568,6 +711,14 @@ export default function GalleryScreen() {
             isExport
           />
         </View>
+      </View>
+
+      <View style={styles.polaroidExportOffscreen} pointerEvents="none">
+        {polaroidExportItem ? (
+          <View ref={polaroidExportRef} collapsable={false} style={styles.polaroidExportFrame}>
+            <PolaroidCardInner item={polaroidExportItem} memoFontFamily={memoFontFamily} />
+          </View>
+        ) : null}
       </View>
 
       {isFocused ? (
@@ -594,103 +745,67 @@ export default function GalleryScreen() {
         animationType="fade"
         onRequestClose={resetEmotionModal}
       >
-        <View style={styles.modalOverlay}>
+        <View style={styles.modalRoot}>
           <Pressable
-            style={StyleSheet.absoluteFillObject}
+            style={styles.modalBackdropFixed}
             onPress={resetEmotionModal}
             accessibilityRole="button"
             accessibilityLabel="닫기"
           />
-          <KeyboardAvoidingView
-            style={styles.modalKeyboardLayer}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={0}
+          <View
+            style={[
+              styles.modalCardHost,
+              keyboardOpen && {
+                justifyContent: 'flex-end',
+                paddingBottom: emotionModalKeyboardHeight + 8 + insets.bottom,
+              },
+            ]}
             pointerEvents="box-none"
           >
-            <View style={styles.modalSheetOuter} pointerEvents="box-none">
-              <Pressable
-                style={styles.emotionModalCard}
-                onPress={(e) => e.stopPropagation()}
+            <Pressable
+              style={[
+                styles.emotionModalCard,
+                keyboardOpen && emotionModalCardMaxHeight != null && {
+                  maxHeight: emotionModalCardMaxHeight,
+                },
+              ]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <ScrollView
+                style={[
+                  styles.emotionModalScroll,
+                  keyboardOpen &&
+                    emotionModalCardMaxHeight != null && {
+                      maxHeight: emotionModalCardMaxHeight,
+                    },
+                ]}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                showsVerticalScrollIndicator={keyboardOpen}
+                bounces={false}
+                nestedScrollEnabled
+                contentContainerStyle={[
+                  styles.emotionModalScrollContent,
+                  keyboardOpen && styles.emotionModalScrollContentKb,
+                ]}
               >
-                <ScrollView
-                  style={styles.emotionModalScroll}
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="on-drag"
-                  showsVerticalScrollIndicator={false}
-                  bounces={false}
-                  nestedScrollEnabled
-                  contentContainerStyle={styles.emotionModalScrollContent}
-                >
-                  <View style={styles.emotionSheet}>
-                    <Text style={styles.modalTitle}>
-                      {editingAlbumId ? '폴라로이드 수정' : '메모와 감정을 남겨 주세요'}
-                    </Text>
-                    <TextInput
-                      value={draftMemo}
-                      onChangeText={setDraftMemo}
-                      placeholder="짧은 메모..."
-                      placeholderTextColor={notebook.inkLight}
-                      maxLength={120}
-                      multiline
-                      style={styles.memoField}
-                    />
-                    <Text style={styles.modalSub}>감정 선택</Text>
-                    <View style={styles.emotionRowModal}>
-                      {moodOrder.map((id) => {
-                        const m = moodPalette[id];
-                        const Icon = modalEmotionIcons[id];
-                        const selected = pickedEmotion === id;
-                        return (
-                          <Pressable
-                            key={id}
-                            onPress={() => setPickedEmotion(id)}
-                            accessibilityLabel={m.label}
-                            style={({ pressed }) => [
-                              styles.emotionCircleBtn,
-                              {
-                                backgroundColor: m.bg,
-                                borderColor: selected ? m.border : 'rgba(15, 23, 42, 0.12)',
-                              },
-                              selected && styles.emotionCircleBtnSelected,
-                              pressed && { opacity: 0.88 },
-                            ]}
-                          >
-                            <Icon
-                              size={22}
-                              color={m.ink}
-                              strokeWidth={selected ? 2.35 : 2}
-                            />
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                    <Pressable
-                      onPress={submitAlbumEntry}
-                      disabled={!pickedEmotion}
-                      style={({ pressed }) => [
-                        styles.submitBtn,
-                        !pickedEmotion && styles.submitBtnDisabled,
-                        pressed && pickedEmotion && { opacity: 0.9 },
-                      ]}
-                    >
-                      <Text style={styles.submitBtnText}>{editingAlbumId ? '저장' : '앨범에 추가'}</Text>
-                    </Pressable>
-                    {editingAlbumId ? (
-                      <Pressable
-                        onPress={confirmDeletePolaroid}
-                        style={({ pressed }) => [styles.modalDeleteBtn, pressed && { opacity: 0.85 }]}
-                      >
-                        <Text style={styles.modalDeleteText}>삭제</Text>
-                      </Pressable>
-                    ) : null}
-                    <Pressable onPress={resetEmotionModal} style={styles.modalCancel}>
-                      <Text style={styles.modalCancelText}>취소</Text>
-                    </Pressable>
-                  </View>
-                </ScrollView>
-              </Pressable>
-            </View>
-          </KeyboardAvoidingView>
+                <EmotionModalBody
+                  editingAlbumId={editingAlbumId}
+                  draftMemo={draftMemo}
+                  setDraftMemo={setDraftMemo}
+                  pickedEmotion={pickedEmotion}
+                  setPickedEmotion={setPickedEmotion}
+                  submitAlbumEntry={submitAlbumEntry}
+                  confirmDeletePolaroid={confirmDeletePolaroid}
+                  resetEmotionModal={resetEmotionModal}
+                  memoFontFamily={memoFontFamily}
+                  albumItems={albumItems}
+                  savePolaroidAsImage={savePolaroidAsImage}
+                  keyboardCompact={keyboardOpen}
+                />
+              </ScrollView>
+            </Pressable>
+          </View>
         </View>
       </Modal>
 
@@ -746,40 +861,127 @@ export default function GalleryScreen() {
   );
 }
 
-function AlbumPolaroid({ item, onPress }) {
-  const eid = item.emotionId || 'happy';
-  const pal = moodPalette[eid] ?? moodPalette.happy;
+function EmotionModalBody({
+  editingAlbumId,
+  draftMemo,
+  setDraftMemo,
+  pickedEmotion,
+  setPickedEmotion,
+  submitAlbumEntry,
+  confirmDeletePolaroid,
+  resetEmotionModal,
+  memoFontFamily,
+  albumItems,
+  savePolaroidAsImage,
+  keyboardCompact,
+}) {
+  const memoFontStyle = memoFontFamily ? { fontFamily: memoFontFamily } : null;
+  const k = Boolean(keyboardCompact);
+
+  return (
+    <View style={[styles.emotionSheet, k && styles.emotionSheetKb]}>
+      <Text style={[styles.modalTitle, k && styles.modalTitleKb]}>
+        {editingAlbumId ? '폴라로이드 수정' : '메모와 감정을 남겨 주세요'}
+      </Text>
+      {editingAlbumId ? (
+        <Pressable
+          onPress={() => {
+            const item = albumItems.find((x) => x.id === editingAlbumId);
+            if (item) void savePolaroidAsImage(item);
+          }}
+          style={({ pressed }) => [
+            styles.modalPolaroidSaveBtn,
+            k && styles.modalPolaroidSaveBtnKb,
+            pressed && { opacity: 0.85 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="폴라로이드 이미지로 저장"
+        >
+          <Download size={k ? 16 : 17} color={notebook.inkMuted} strokeWidth={2} />
+          <Text style={styles.modalPolaroidSaveText}>이미지로 저장</Text>
+        </Pressable>
+      ) : null}
+      <TextInput
+        value={draftMemo}
+        onChangeText={setDraftMemo}
+        placeholder="짧은 메모..."
+        placeholderTextColor={notebook.inkLight}
+        maxLength={120}
+        multiline
+        style={[styles.memoField, k && styles.memoFieldKb, memoFontStyle]}
+      />
+      <Text style={[styles.modalSub, k && styles.modalSubKb]}>감정 선택</Text>
+      <View style={[styles.emotionRowModal, k && styles.emotionRowModalKb]}>
+        {moodOrder.map((id) => {
+          const m = moodPalette[id];
+          const Icon = modalEmotionIcons[id];
+          const selected = pickedEmotion === id;
+          const iconSize = k ? 20 : 22;
+          return (
+            <Pressable
+              key={id}
+              onPress={() => setPickedEmotion(id)}
+              accessibilityLabel={m.label}
+              style={({ pressed }) => [
+                styles.emotionCircleBtn,
+                k && styles.emotionCircleBtnKb,
+                {
+                  backgroundColor: m.bg,
+                  borderColor: selected ? m.border : 'rgba(15, 23, 42, 0.12)',
+                },
+                selected && styles.emotionCircleBtnSelected,
+                pressed && { opacity: 0.88 },
+              ]}
+            >
+              <Icon
+                size={iconSize}
+                color={m.ink}
+                strokeWidth={selected ? 2.35 : 2}
+              />
+            </Pressable>
+          );
+        })}
+      </View>
+      <Pressable
+        onPress={submitAlbumEntry}
+        disabled={!pickedEmotion}
+        style={({ pressed }) => [
+          styles.submitBtn,
+          k && styles.submitBtnKb,
+          !pickedEmotion && styles.submitBtnDisabled,
+          pressed && pickedEmotion && { opacity: 0.9 },
+        ]}
+      >
+        <Text style={styles.submitBtnText}>{editingAlbumId ? '저장' : '앨범에 추가'}</Text>
+      </Pressable>
+      {editingAlbumId && !k ? (
+        <Pressable
+          onPress={confirmDeletePolaroid}
+          style={({ pressed }) => [styles.modalDeleteBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={styles.modalDeleteText}>삭제</Text>
+        </Pressable>
+      ) : null}
+      <Pressable onPress={resetEmotionModal} style={[styles.modalCancel, k && styles.modalCancelKb]}>
+        <Text style={styles.modalCancelText}>취소</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function AlbumPolaroid({ item, onPress, onLongPress }) {
+  const { memoFontFamily } = useMemoFont();
 
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={420}
       style={({ pressed }) => [styles.polaroid, pressed && { opacity: 0.94 }]}
       accessibilityRole="button"
       accessibilityLabel="폴라로이드 수정"
     >
-      <View
-        style={[
-          styles.polaroidUnified,
-          {
-            borderColor: pal.border,
-            shadowColor: pal.border,
-          },
-        ]}
-      >
-        <View style={styles.polaroidPhotoSection}>
-          <View style={styles.polaroidArchivePhotoInner}>
-            <Image source={{ uri: item.imageUri }} style={styles.polaroidImage} resizeMode="cover" />
-          </View>
-        </View>
-        <View style={[styles.polaroidCaptionBar, { backgroundColor: pal.bg }]}>
-          <ArchiveMemoTimeCaption
-            memo={item.memo}
-            timestamp={item.timestamp}
-            memoColor={pal.ink}
-            timeColor={notebook.inkMuted}
-          />
-        </View>
-      </View>
+      <PolaroidCardInner item={item} memoFontFamily={memoFontFamily} />
     </Pressable>
   );
 }
@@ -808,20 +1010,13 @@ const styles = StyleSheet.create({
     color: notebook.ink,
   },
   sectionLabel: {
-    marginBottom: 12,
-  },
-  sectionKicker: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    color: notebook.inkLight,
-    textTransform: 'uppercase',
+    marginBottom: 10,
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
     color: notebook.ink,
-    marginTop: 2,
+    marginTop: 0,
   },
   sectionHint: {
     marginTop: 6,
@@ -851,6 +1046,15 @@ const styles = StyleSheet.create({
   moodiShareCaptureRoot: {
     alignItems: 'center',
   },
+  polaroidExportOffscreen: {
+    position: 'absolute',
+    left: -12000,
+    top: 0,
+  },
+  polaroidExportFrame: {
+    width: 200,
+    alignSelf: 'center',
+  },
   saveMoodiBtn: {
     width: 36,
     height: 32,
@@ -865,7 +1069,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: '#fff',
     padding: 16,
-    marginBottom: 36,
+    marginBottom: 32,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -877,8 +1081,8 @@ const styles = StyleSheet.create({
     }),
   },
   archiveHeader: {
-    marginTop: 28,
-    marginBottom: 14,
+    marginTop: 20,
+    marginBottom: 12,
   },
   emptyArchive: {
     fontSize: 14,
@@ -943,19 +1147,21 @@ const styles = StyleSheet.create({
     margin: 0,
     backgroundColor: notebook.fabLight,
   },
-  modalOverlay: {
+  modalRoot: {
     flex: 1,
+  },
+  /** Full-screen dim; never moves with keyboard (sibling to card host). */
+  modalBackdropFixed: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(15, 23, 42, 0.4)',
   },
-  modalKeyboardLayer: {
-    flex: 1,
+  /** Positions the card: centered when keyboard closed; bottom-aligned above keys when open. */
+  modalCardHost: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  modalSheetOuter: {
-    width: '100%',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    pointerEvents: 'box-none',
   },
   emotionModalCard: {
     width: '100%',
@@ -970,11 +1176,42 @@ const styles = StyleSheet.create({
   emotionModalScrollContent: {
     paddingBottom: 16,
   },
+  emotionModalScrollContentKb: {
+    paddingBottom: 20,
+  },
   emotionSheet: {
     backgroundColor: '#fff',
     borderRadius: 18,
     padding: 20,
     maxHeight: '90%',
+  },
+  /** Tighter sheet when keyboard is open; height bounded by outer ScrollView maxHeight. */
+  emotionSheetKb: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    maxHeight: '100%',
+  },
+  modalTitleKb: {
+    marginBottom: 8,
+  },
+  modalPolaroidSaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    alignSelf: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  modalPolaroidSaveBtnKb: {
+    marginBottom: 6,
+    paddingVertical: 4,
+  },
+  modalPolaroidSaveText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: notebook.inkMuted,
   },
   modalTitle: {
     fontSize: 17,
@@ -989,17 +1226,29 @@ const styles = StyleSheet.create({
     color: notebook.inkMuted,
     marginBottom: 8,
   },
+  modalSubKb: {
+    marginBottom: 4,
+  },
   memoField: {
     borderWidth: 1,
     borderColor: notebook.gridLine,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 16,
+    lineHeight: 24,
     color: notebook.ink,
     minHeight: 72,
     textAlignVertical: 'top',
     marginBottom: 14,
+  },
+  memoFieldKb: {
+    minHeight: 48,
+    maxHeight: 88,
+    paddingVertical: 8,
+    marginBottom: 8,
+    lineHeight: 22,
+    fontSize: 15,
   },
   emotionRowModal: {
     flexDirection: 'row',
@@ -1009,6 +1258,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingHorizontal: 2,
   },
+  emotionRowModalKb: {
+    marginBottom: 2,
+    gap: 2,
+  },
   emotionCircleBtn: {
     width: 48,
     height: 48,
@@ -1016,6 +1269,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
+  },
+  emotionCircleBtnKb: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   emotionCircleBtnSelected: {
     borderWidth: 2.5,
@@ -1038,6 +1296,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
+  },
+  submitBtnKb: {
+    marginTop: 10,
+    paddingVertical: 12,
   },
   submitBtnDisabled: {
     opacity: 0.4,
@@ -1062,6 +1324,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingBottom: 4,
+  },
+  modalCancelKb: {
+    marginTop: 6,
+    paddingVertical: 8,
+    paddingBottom: 2,
   },
   modalCancelText: {
     fontSize: 15,

@@ -20,3 +20,8 @@ export const moodPalette = {
 };
 
 export const moodOrder = ['happy', 'flutter', 'calm', 'gloom', 'annoyed'];
+
+/** Timeline hour-grid cells only — 행복 슬롯만 살짝 더 또렷하게 (하단 FAB·모달은 moodPalette 그대로) */
+export const timelineSlotOverrides = {
+  happy: { bg: '#FFF8CC', border: '#F4C430' },
+};
