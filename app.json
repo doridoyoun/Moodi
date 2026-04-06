@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Moodi",
+    "slug": "Moodi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Moodi가 사진을 선택할 수 있도록 갤러리 접근을 허용합니다."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Moodi가 사진을 저장하기 위해 갤러리에 접근합니다.",
+          "savePhotosPermission": "Moodi가 네컷을 앨범에 저장합니다.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
+    ]
+  }
+}
