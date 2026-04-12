@@ -33,6 +33,23 @@ import { useMemoFont } from '../src/context/MemoFontContext';
 import { useMood } from '../src/context/MoodContext';
 import { moodOrder, moodPalette, notebook } from '../constants/theme';
 
+/**
+ * Resolves the persisted mood entry for an album row (MoodContext keeps these in sync).
+ * Gallery cards still render emotion / memo / image from albumItems only; this is used for
+ * safe fallbacks (e.g. timestamp) when legacy rows lack moodEntryId.
+ */
+function getLinkedEntry(entries, item) {
+  if (!item || !Array.isArray(entries)) return null;
+  if (item.moodEntryId) {
+    const found = entries.find((e) => e.id === item.moodEntryId);
+    if (found) return found;
+  }
+  if (typeof item.timestamp === 'string') {
+    return entries.find((e) => e.createdAt === item.timestamp) ?? null;
+  }
+  return null;
+}
+
 function formatTimeShort(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -292,9 +309,10 @@ function ArchiveMemoTimeCaption({ memo, timestamp, memoColor, timeColor, memoFon
   );
 }
 
-function PolaroidCardInner({ item, memoFontFamily }) {
-  const eid = item.emotionId || 'happy';
+function PolaroidCardInner({ item, memoFontFamily, linkedEntry }) {
+  const eid = item?.emotionId || 'happy';
   const pal = moodPalette[eid] ?? moodPalette.happy;
+  const displayTimestamp = item?.timestamp ?? linkedEntry?.createdAt;
 
   return (
     <View
@@ -308,13 +326,17 @@ function PolaroidCardInner({ item, memoFontFamily }) {
     >
       <View style={styles.polaroidPhotoSection}>
         <View style={styles.polaroidArchivePhotoInner}>
-          <Image source={{ uri: item.imageUri }} style={styles.polaroidImage} resizeMode="cover" />
+          {item?.imageUri ? (
+            <Image source={{ uri: item.imageUri }} style={styles.polaroidImage} resizeMode="cover" />
+          ) : (
+            <View style={styles.polaroidImage} />
+          )}
         </View>
       </View>
       <View style={[styles.polaroidCaptionBar, { backgroundColor: pal.bg }]}>
         <ArchiveMemoTimeCaption
-          memo={item.memo}
-          timestamp={item.timestamp}
+          memo={item?.memo}
+          timestamp={displayTimestamp}
           memoColor={pal.ink}
           timeColor={notebook.inkMuted}
           memoFontFamily={memoFontFamily}
@@ -365,6 +387,7 @@ export default function GalleryScreen() {
   const { memoFontFamily } = useMemoFont();
   const {
     albumItems,
+    entries,
     fourSlotIds,
     setFourSlotAt,
     clearAllFourSlots,
@@ -695,6 +718,7 @@ export default function GalleryScreen() {
               <AlbumPolaroid
                 key={item.id}
                 item={item}
+                linkedEntry={getLinkedEntry(entries, item)}
                 onPress={() => openEditAlbum(item)}
                 onLongPress={() => promptPolaroidExport(item)}
               />
@@ -716,7 +740,11 @@ export default function GalleryScreen() {
       <View style={styles.polaroidExportOffscreen} pointerEvents="none">
         {polaroidExportItem ? (
           <View ref={polaroidExportRef} collapsable={false} style={styles.polaroidExportFrame}>
-            <PolaroidCardInner item={polaroidExportItem} memoFontFamily={memoFontFamily} />
+            <PolaroidCardInner
+              item={polaroidExportItem}
+              memoFontFamily={memoFontFamily}
+              linkedEntry={getLinkedEntry(entries, polaroidExportItem)}
+            />
           </View>
         ) : null}
       </View>
@@ -830,6 +858,7 @@ export default function GalleryScreen() {
               <FlatList
                 data={albumItems}
                 keyExtractor={(it) => it.id}
+                extraData={entries.length}
                 numColumns={3}
                 contentContainerStyle={styles.pickerGrid}
                 columnWrapperStyle={styles.pickerRow}
@@ -969,7 +998,7 @@ function EmotionModalBody({
   );
 }
 
-function AlbumPolaroid({ item, onPress, onLongPress }) {
+function AlbumPolaroid({ item, linkedEntry, onPress, onLongPress }) {
   const { memoFontFamily } = useMemoFont();
 
   return (
@@ -981,7 +1010,7 @@ function AlbumPolaroid({ item, onPress, onLongPress }) {
       accessibilityRole="button"
       accessibilityLabel="폴라로이드 수정"
     >
-      <PolaroidCardInner item={item} memoFontFamily={memoFontFamily} />
+      <PolaroidCardInner item={item} memoFontFamily={memoFontFamily} linkedEntry={linkedEntry} />
     </Pressable>
   );
 }

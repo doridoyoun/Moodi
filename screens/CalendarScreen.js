@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import NotebookLayout from '../components/NotebookLayout';
 import { useMood } from '../src/context/MoodContext';
 import { moodOrder, moodPalette, notebook } from '../constants/theme';
-import { computeTopTwoEmotionIds } from '../storage/timelineStateStorage';
+import { computeTopTwoEmotionIdsFromEntries } from '../storage/timelineStateStorage';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -36,7 +36,7 @@ function dateKeyForDay(year, monthIndex, day) {
 
 export default function CalendarScreen() {
   const navigation = useNavigation();
-  const { timelineByDate, setSelectedDate } = useMood();
+  const { entries, setSelectedDate } = useMood();
   const [cursor, setCursor] = useState(() => new Date());
 
   const year = cursor.getFullYear();
@@ -116,8 +116,7 @@ export default function CalendarScreen() {
                 return <View key={`e-${idx}`} style={styles.cell} />;
               }
               const key = dateKeyForDay(year, monthIndex, day);
-              const dayMap = timelineByDate[key];
-              const topTwo = computeTopTwoEmotionIds(dayMap);
+              const topTwo = computeTopTwoEmotionIdsFromEntries(entries, key);
               const fallbackA = 'rgba(255,255,255,0.55)';
               const fallbackB = 'rgba(247,250,252,0.95)';
               let gradientColors;

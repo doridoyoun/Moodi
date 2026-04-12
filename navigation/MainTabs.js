@@ -9,8 +9,13 @@ import { notebook } from '../constants/theme';
 
 const Tab = createBottomTabNavigator();
 
-const TAB_BAR_MIN_TOP = 8;
-const TAB_BAR_EXTRA_BOTTOM = 10;
+/** Extra top padding inside the tab bar (taller, easier targets). */
+const TAB_BAR_MIN_TOP = 20;
+
+/** Added below safe-area inset for a roomier bottom zone. */
+const TAB_BAR_EXTRA_BOTTOM = 26;
+
+const TAB_ICON_SIZE = 30;
 
 export default function MainTabs() {
   const insets = useSafeAreaInsets();
@@ -29,15 +34,22 @@ export default function MainTabs() {
           borderTopColor: notebook.gridLine,
           paddingTop: TAB_BAR_MIN_TOP,
           paddingBottom: bottomPad,
-          paddingHorizontal: 4,
+          paddingHorizontal: 8,
+          minHeight: 88,
+        },
+        tabBarIconStyle: {
+          marginBottom: 0,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 13,
           fontWeight: '600',
+          marginTop: 3,
           marginBottom: 0,
         },
         tabBarItemStyle: {
-          paddingVertical: 4,
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingVertical: 6,
         },
       }}
     >
@@ -45,21 +57,27 @@ export default function MainTabs() {
         name="Timeline"
         component={TimelineScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
+          tabBarIcon: ({ color }) => (
+            <Clock color={color} size={TAB_ICON_SIZE} strokeWidth={2} />
+          ),
         }}
       />
       <Tab.Screen
         name="Gallery"
         component={GalleryScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <ImageIcon color={color} size={size} />,
+          tabBarIcon: ({ color }) => (
+            <ImageIcon color={color} size={TAB_ICON_SIZE} strokeWidth={2} />
+          ),
         }}
       />
       <Tab.Screen
         name="Calendar"
         component={CalendarScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <Calendar color={color} size={size} />,
+          tabBarIcon: ({ color }) => (
+            <Calendar color={color} size={TAB_ICON_SIZE} strokeWidth={2} />
+          ),
         }}
       />
     </Tab.Navigator>

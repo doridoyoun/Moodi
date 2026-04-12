@@ -9,8 +9,12 @@ import React, {
 } from 'react';
 import {
   addDaysToDateKey,
-  createEmptyChunks,
-  createEmptyHourMap,
+  buildLegacyTimelineByDateFromEntries,
+  createMoodEntry,
+  getEntriesForDate,
+  getEntriesForDateHour,
+  normalizeMoodEntries,
+  parseDateKey,
   toDateKey,
 } from '../../storage/timelineStateStorage';
 import { loadMoodPersistedState, saveMoodPersistedState } from '../../storage/appMoodStorage';
@@ -27,70 +31,32 @@ function deriveTimelineAnchorFromTimestamp(iso) {
   return { dateKey, hour, chunk };
 }
 
-function applyAlbumItemToTimelineSlot(prev, item) {
-  const anchor = item.timelineAnchor ?? deriveTimelineAnchorFromTimestamp(item.timestamp);
-  const { dateKey, hour, chunk } = anchor;
-  const prevDay = prev[dateKey] ?? createEmptyHourMap();
-  const row = [...(prevDay[hour] ?? createEmptyChunks())];
-  row[chunk] = {
-    emotionId: item.emotionId,
-    count: 1,
-    memo: (item.memo || '').trim(),
-  };
-  return { ...prev, [dateKey]: { ...prevDay, [hour]: row } };
-}
-
-function clearAlbumFromTimeline(prev, item) {
-  const anchor = item.timelineAnchor ?? deriveTimelineAnchorFromTimestamp(item.timestamp);
-  const { dateKey, hour, chunk } = anchor;
-  const prevDay = prev[dateKey] ?? createEmptyHourMap();
-  const row = [...(prevDay[hour] ?? createEmptyChunks())];
-  row[chunk] = null;
-  return { ...prev, [dateKey]: { ...prevDay, [hour]: row } };
-}
-
-function mergeChunkCell(prevCell, emotionId, memoText) {
-  const memo = (memoText || '').trim();
-  if (!prevCell) {
-    return { emotionId, count: 1, memo };
-  }
-  if (prevCell.emotionId === emotionId) {
-    return {
-      emotionId,
-      count: Math.min(3, prevCell.count + 1),
-      memo: memo || prevCell.memo || '',
-    };
-  }
-  return { emotionId, count: 1, memo };
-}
-
-function mergeChunkManual(prevCell, emotionId) {
-  if (!prevCell) {
-    return { emotionId, count: 1, memo: '' };
-  }
-  if (prevCell.emotionId === emotionId) {
-    return {
-      emotionId,
-      count: Math.min(3, prevCell.count + 1),
-      memo: prevCell.memo ?? '',
-    };
-  }
-  return { emotionId, count: 1, memo: '' };
-}
-
 export function MoodProvider({ children }) {
-  const [timelineByDate, setTimelineByDate] = useState({});
+  const [entries, setEntries] = useState([]);
   const [albumItems, setAlbumItems] = useState([]);
   const [fourSlotIds, setFourSlotIds] = useState([null, null, null, null]);
   const [moodiDaySummary, setMoodiDaySummary] = useState('');
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
   const hydrated = useRef(false);
 
+  const timelineByDate = useMemo(() => buildLegacyTimelineByDateFromEntries(entries), [entries]);
+
+  const getEntriesForSelectedDate = useCallback(() => {
+    return getEntriesForDate(entries, selectedDate);
+  }, [entries, selectedDate]);
+
+  const getEntriesForHour = useCallback(
+    (hour) => {
+      return getEntriesForDateHour(entries, selectedDate, hour);
+    },
+    [entries, selectedDate],
+  );
+
   useEffect(() => {
     let cancelled = false;
     loadMoodPersistedState().then((data) => {
       if (cancelled) return;
-      setTimelineByDate(data.timelineByDate);
+      setEntries(normalizeMoodEntries(data.entries));
       setAlbumItems(data.albumItems);
       setFourSlotIds(data.fourSlotIds);
       setMoodiDaySummary(data.moodiDaySummary ?? '');
@@ -104,37 +70,79 @@ export function MoodProvider({ children }) {
   useEffect(() => {
     if (!hydrated.current) return;
     const t = setTimeout(() => {
-      saveMoodPersistedState({ timelineByDate, albumItems, fourSlotIds, moodiDaySummary }).catch(
-        () => {},
-      );
+      saveMoodPersistedState({
+        entries,
+        albumItems,
+        fourSlotIds,
+        moodiDaySummary,
+      }).catch(() => {});
     }, 400);
     return () => clearTimeout(t);
-  }, [timelineByDate, albumItems, fourSlotIds, moodiDaySummary]);
+  }, [entries, albumItems, fourSlotIds, moodiDaySummary]);
 
   const shiftSelectedDateByDays = useCallback((delta) => {
     setSelectedDate((prev) => addDaysToDateKey(prev, delta));
   }, []);
 
+  const createEntry = useCallback(({ emotionId, memo = '', dateKey, hour }) => {
+    const p = parseDateKey(dateKey);
+    if (!p) return null;
+    const now = new Date();
+    const d = new Date(
+      p.year,
+      p.monthIndex,
+      p.day,
+      hour,
+      now.getMinutes(),
+      now.getSeconds(),
+      now.getMilliseconds(),
+    );
+    const entry = createMoodEntry({
+      emotionId,
+      memo: typeof memo === 'string' ? memo : '',
+      createdAt: d.toISOString(),
+    });
+    setEntries((prev) =>
+      [...prev, entry].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
+    );
+    return entry;
+  }, []);
+
+  const updateEntry = useCallback((id, updates) => {
+    setEntries((prev) =>
+      prev.map((e) => {
+        if (e.id !== id) return e;
+        const emotionId = updates.emotionId !== undefined ? updates.emotionId : e.emotionId;
+        const memo = updates.memo !== undefined ? String(updates.memo).trim() : e.memo;
+        return createMoodEntry({
+          id: e.id,
+          emotionId,
+          memo,
+          createdAt: e.createdAt,
+        });
+      }),
+    );
+  }, []);
+
+  const deleteEntry = useCallback((id) => {
+    setEntries((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
   const applyEmotionForCurrentHour = useCallback((emotionId) => {
     const todayKey = toDateKey(new Date());
     const hour = new Date().getHours();
-    const minute = new Date().getMinutes();
-    const chunk = Math.min(CHUNKS - 1, Math.floor(minute / 10));
-
-    setTimelineByDate((prev) => {
-      const prevDay = prev[todayKey] ?? createEmptyHourMap();
-      const row = [...(prevDay[hour] ?? createEmptyChunks())];
-      const prevCell = row[chunk];
-      row[chunk] = mergeChunkManual(prevCell, emotionId);
-      const nextDay = { ...prevDay, [hour]: row };
-      return { ...prev, [todayKey]: nextDay };
-    });
-  }, []);
+    createEntry({ emotionId, memo: '', dateKey: todayKey, hour });
+  }, [createEntry]);
 
   const addAlbumItem = useCallback(({ imageUri, emotionId, memo }) => {
     const timestamp = new Date().toISOString();
     const id = `g-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const timelineAnchor = deriveTimelineAnchorFromTimestamp(timestamp);
+    const entry = createMoodEntry({
+      emotionId,
+      memo: (memo || '').trim(),
+      createdAt: timestamp,
+    });
     const item = {
       id,
       imageUri,
@@ -142,49 +150,63 @@ export function MoodProvider({ children }) {
       memo: (memo || '').trim(),
       timestamp,
       timelineAnchor,
+      moodEntryId: entry.id,
     };
 
+    setEntries((prev) =>
+      [...prev, entry].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
+    );
     setAlbumItems((prev) => [item, ...prev]);
-
-    setTimelineByDate((prev) => {
-      const prevDay = prev[timelineAnchor.dateKey] ?? createEmptyHourMap();
-      const row = [...(prevDay[timelineAnchor.hour] ?? createEmptyChunks())];
-      const prevCell = row[timelineAnchor.chunk];
-      row[timelineAnchor.chunk] = mergeChunkCell(prevCell, emotionId, item.memo);
-      return { ...prev, [timelineAnchor.dateKey]: { ...prevDay, [timelineAnchor.hour]: row } };
-    });
 
     return item;
   }, []);
 
   const updateAlbumItem = useCallback((id, updates) => {
-    let nextItem = null;
     setAlbumItems((prevItems) => {
       const idx = prevItems.findIndex((x) => x.id === id);
       if (idx < 0) return prevItems;
       const prevItem = prevItems[idx];
-      nextItem = {
+      const nextItem = {
         ...prevItem,
         emotionId: updates.emotionId ?? prevItem.emotionId,
         memo: updates.memo !== undefined ? String(updates.memo).trim() : prevItem.memo,
         timelineAnchor: prevItem.timelineAnchor ?? deriveTimelineAnchorFromTimestamp(prevItem.timestamp),
       };
-      const next = prevItems.map((x, j) => (j === idx ? nextItem : x));
-      return next;
+
+      setEntries((ent) => {
+        let eid = nextItem.moodEntryId;
+        if (!eid && prevItem.timestamp) {
+          eid = ent.find((e) => e.createdAt === prevItem.timestamp)?.id;
+        }
+        if (!eid) return ent;
+        return ent.map((e) => {
+          if (e.id !== eid) return e;
+          return createMoodEntry({
+            id: e.id,
+            emotionId: nextItem.emotionId,
+            memo: nextItem.memo,
+            createdAt: e.createdAt,
+          });
+        });
+      });
+
+      return prevItems.map((x, j) => (j === idx ? nextItem : x));
     });
-    if (nextItem) {
-      setTimelineByDate((prev) => applyAlbumItemToTimelineSlot(prev, nextItem));
-    }
   }, []);
 
-  const deleteAlbumItem = useCallback((id) => {
+  const deleteAlbumItem = useCallback((albumId) => {
     setAlbumItems((prevItems) => {
-      const item = prevItems.find((x) => x.id === id);
-      if (!item) return prevItems;
-      setTimelineByDate((prev) => clearAlbumFromTimeline(prev, item));
-      return prevItems.filter((x) => x.id !== id);
+      const item = prevItems.find((x) => x.id === albumId);
+      if (item) {
+        if (item.moodEntryId) {
+          setEntries((prev) => prev.filter((e) => e.id !== item.moodEntryId));
+        } else {
+          setEntries((prev) => prev.filter((e) => e.createdAt !== item.timestamp));
+        }
+      }
+      return prevItems.filter((x) => x.id !== albumId);
     });
-    setFourSlotIds((prev) => prev.map((sid) => (sid === id ? null : sid)));
+    setFourSlotIds((prev) => prev.map((sid) => (sid === albumId ? null : sid)));
   }, []);
 
   const setFourSlotAt = useCallback((index, albumId) => {
@@ -201,35 +223,46 @@ export function MoodProvider({ children }) {
 
   const value = useMemo(
     () => ({
+      entries,
       timelineByDate,
-      albumItems,
-      fourSlotIds,
-      setFourSlotAt,
-      clearAllFourSlots,
-      moodiDaySummary,
-      setMoodiDaySummary,
       selectedDate,
       setSelectedDate,
       shiftSelectedDateByDays,
+      getEntriesForSelectedDate,
+      getEntriesForHour,
+      createEntry,
+      updateEntry,
+      deleteEntry,
       applyEmotionForCurrentHour,
+      albumItems,
       addAlbumItem,
       updateAlbumItem,
       deleteAlbumItem,
-    }),
-    [
-      timelineByDate,
-      albumItems,
       fourSlotIds,
       setFourSlotAt,
       clearAllFourSlots,
       moodiDaySummary,
       setMoodiDaySummary,
+    }),
+    [
+      entries,
+      timelineByDate,
       selectedDate,
       shiftSelectedDateByDays,
+      getEntriesForSelectedDate,
+      getEntriesForHour,
+      createEntry,
+      updateEntry,
+      deleteEntry,
       applyEmotionForCurrentHour,
+      albumItems,
       addAlbumItem,
       updateAlbumItem,
       deleteAlbumItem,
+      fourSlotIds,
+      setFourSlotAt,
+      clearAllFourSlots,
+      moodiDaySummary,
     ],
   );
 
