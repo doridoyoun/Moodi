@@ -16,6 +16,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import {
   CloudRain,
   Download,
@@ -591,6 +592,7 @@ function TodaysMoodiCanvas({
 }
 
 export default function GalleryScreen() {
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { memoFontFamily } = useMemoFont();
@@ -920,18 +922,22 @@ export default function GalleryScreen() {
   return (
     <NotebookLayout>
       <View style={[styles.galleryRoot, Platform.OS === 'web' && styles.galleryRootWeb]}>
-        <View
-          style={[
-            styles.galleryFitColumn,
-            { paddingBottom: Math.max(insets.bottom, 8) },
-          ]}
-        >
+        <View style={styles.galleryFitColumn}>
           <View style={[styles.titleRow, { marginBottom: galleryFitMetrics.titleRowMb }]}>
             <Text style={styles.emoji}>📷</Text>
             <View style={styles.titleTextCol}>
               <Text style={styles.pageTitle}>Mood Gallery</Text>
               <Text style={styles.pageDateHint}>{galleryDateLine}</Text>
             </View>
+            <Pressable
+              onPress={() => navigation.navigate('GalleryArchive')}
+              hitSlop={8}
+              style={({ pressed }) => [styles.archiveBtn, pressed && { opacity: 0.75 }]}
+              accessibilityRole="button"
+              accessibilityLabel="보관함 보기"
+            >
+              <Text style={styles.archiveBtnText}>보관함 보기</Text>
+            </Pressable>
           </View>
 
           <View style={styles.galleryMiddle} onLayout={onGalleryMiddleLayout}>
@@ -1060,7 +1066,10 @@ export default function GalleryScreen() {
             accessibilityLabel="닫기"
           />
           <View style={styles.modalCardHost} pointerEvents="box-none">
-            <Pressable style={styles.memoModalCard} onPress={(e) => e.stopPropagation()}>
+            <Pressable
+              style={[styles.memoModalCard, { paddingBottom: insets.bottom + 16 }]}
+              onPress={(e) => e.stopPropagation()}
+            >
               <Text style={styles.memoModalTitle}>한 줄 메모</Text>
               <TextInput
                 ref={memoModalInputRef}
@@ -1204,7 +1213,7 @@ function EmotionModalBody({
   bottomInset,
 }) {
   return (
-    <View style={[styles.emotionSheet, { paddingBottom: bottomInset + 20 }]}>
+    <View style={[styles.emotionSheet, { paddingBottom: bottomInset + 16 }]}>
       <Text style={styles.emotionPickerTitle}>감정 선택</Text>
       <View style={styles.emotionPickerRowWrap}>
         <View style={styles.emotionRowModal}>
@@ -1283,6 +1292,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 8,
     flexShrink: 0,
+  },
+  archiveBtn: {
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+    flexShrink: 0,
+    marginLeft: 'auto',
+  },
+  archiveBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: notebook.inkMuted,
   },
   emoji: {
     fontSize: 18,

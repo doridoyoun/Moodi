@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, Clock, Image as ImageIcon } from 'lucide-react-native';
 import CalendarStack from './CalendarStack';
-import GalleryScreen from '../screens/GalleryScreen';
+import GalleryStack from './GalleryStack';
 import TimelineScreen from '../screens/TimelineScreen';
 import { notebook } from '../constants/theme';
 
@@ -12,14 +12,11 @@ const Tab = createBottomTabNavigator();
 /** Extra top padding inside the tab bar (taller, easier targets). */
 const TAB_BAR_MIN_TOP = 20;
 
-/** Added below safe-area inset for a roomier bottom zone. */
-const TAB_BAR_EXTRA_BOTTOM = 26;
-
 const TAB_ICON_SIZE = 30;
 
 export default function MainTabs() {
   const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, 12) + TAB_BAR_EXTRA_BOTTOM;
+  const bottomPad = insets.bottom + 16;
 
   return (
     <Tab.Navigator
@@ -64,7 +61,7 @@ export default function MainTabs() {
       />
       <Tab.Screen
         name="Gallery"
-        component={GalleryScreen}
+        component={GalleryStack}
         options={{
           tabBarIcon: ({ color }) => (
             <ImageIcon color={color} size={TAB_ICON_SIZE} strokeWidth={2} />

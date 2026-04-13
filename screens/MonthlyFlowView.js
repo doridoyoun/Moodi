@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import NotebookLayout from '../components/NotebookLayout';
 import { useMood } from '../src/context/MoodContext';
@@ -16,7 +15,6 @@ const EMPTY_BAR_HEIGHT = 11;
 export default function MonthlyFlowView() {
   const navigation = useNavigation();
   const route = useRoute();
-  const insets = useSafeAreaInsets();
   const { entries, setSelectedDate } = useMood();
 
   const year = route.params?.year;
@@ -65,10 +63,7 @@ export default function MonthlyFlowView() {
         </View>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[
-            styles.pagePad,
-            { paddingBottom: Math.max(insets.bottom, 24) },
-          ]}
+          contentContainerStyle={styles.pagePad}
           showsVerticalScrollIndicator={false}
         >
         <Text style={styles.monthHeading}>{title}</Text>
@@ -149,6 +144,7 @@ const styles = StyleSheet.create({
   pagePad: {
     paddingHorizontal: 20,
     paddingTop: 4,
+    paddingBottom: 24,
   },
   monthHeading: {
     fontSize: 18,

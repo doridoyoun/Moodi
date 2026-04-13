@@ -1,13 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -137,10 +129,8 @@ function VisualPhotoGrid() {
  */
 export default function OnboardingScreen({ onComplete }) {
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef(null);
   const [page, setPage] = useState(0);
-  const { width: windowW, height: windowH } = useWindowDimensions();
-  const slideW = windowW;
+  const { height: windowH } = useWindowDimensions();
   const pageMinH = Math.max(460, windowH * 0.58);
 
   const finish = useCallback(async () => {
@@ -152,27 +142,17 @@ export default function OnboardingScreen({ onComplete }) {
       finish();
       return;
     }
-    const next = page + 1;
-    scrollRef.current?.scrollTo({ x: next * slideW, animated: true });
-    setPage(next);
-  }, [page, slideW, finish]);
-
-  const onMomentumScrollEnd = useCallback(
-    (e) => {
-      const x = e.nativeEvent.contentOffset.x;
-      const i = Math.round(x / slideW);
-      setPage(Math.max(0, Math.min(i, SLIDES.length - 1)));
-    },
-    [slideW],
-  );
+    setPage((p) => p + 1);
+  }, [page, finish]);
 
   const isLast = page === SLIDES.length - 1;
+  const slide = SLIDES[page];
 
   return (
     <View
       style={[
         styles.root,
-        { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 20) },
+        { paddingTop: insets.top, paddingBottom: insets.bottom + 16 },
       ]}
     >
       <StatusBar style="dark" />
@@ -189,36 +169,22 @@ export default function OnboardingScreen({ onComplete }) {
         </Pressable>
       </View>
 
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={onMomentumScrollEnd}
-        scrollEventThrottle={16}
-        style={styles.pager}
-        contentContainerStyle={{
-          width: slideW * SLIDES.length,
-          minHeight: pageMinH,
-        }}
-      >
-        {SLIDES.map((slide, i) => (
-          <View key={slide.headline} style={[styles.page, { width: slideW, minHeight: pageMinH }]}>
-            <AnimatedSlide active={page === i}>
-              <View style={styles.topSpacer} />
-              <Text style={styles.headline}>{slide.headline}</Text>
-              <Text style={styles.subtext} numberOfLines={2}>
-                {slide.sub}
-              </Text>
-              <View style={styles.visualMount}>
-                {slide.visual === 'emotions' && <VisualEmotionRow />}
-                {slide.visual === 'timeline' && <VisualTimelineBar />}
-                {slide.visual === 'grid' && <VisualPhotoGrid />}
-              </View>
-            </AnimatedSlide>
-          </View>
-        ))}
-      </ScrollView>
+      <View style={[styles.pager, { minHeight: pageMinH }]}>
+        <View style={styles.page} key={page}>
+          <AnimatedSlide active>
+            <View style={styles.topSpacer} />
+            <Text style={styles.headline}>{slide.headline}</Text>
+            <Text style={styles.subtext} numberOfLines={2}>
+              {slide.sub}
+            </Text>
+            <View style={styles.visualMount}>
+              {slide.visual === 'emotions' && <VisualEmotionRow />}
+              {slide.visual === 'timeline' && <VisualTimelineBar />}
+              {slide.visual === 'grid' && <VisualPhotoGrid />}
+            </View>
+          </AnimatedSlide>
+        </View>
+      </View>
 
       <View style={styles.footer}>
         <View style={styles.dots}>
@@ -265,6 +231,7 @@ const styles = StyleSheet.create({
   },
   pager: {
     flex: 1,
+    width: '100%',
   },
   page: {
     flex: 1,

@@ -13,7 +13,7 @@ import {
   parseDateKey,
   toDateKey,
 } from '../storage/timelineStateStorage';
-import { emotionBgSequenceForDay } from '../utils/monthlyFlowHelpers';
+import { countEmotionsByTopCategoryForDay } from '../utils/monthlyFlowHelpers';
 import {
   getMoodiFeedback,
   getMoodEntriesRecentDays,
@@ -82,9 +82,14 @@ export default function CalendarScreen() {
     [year, monthIndex],
   );
 
-  const selectedDayPreviewColors = useMemo(
-    () => emotionBgSequenceForDay(entries, selectedDate, 6),
+  const selectedDayEmotionCounts = useMemo(
+    () => countEmotionsByTopCategoryForDay(entries, selectedDate),
     [entries, selectedDate],
+  );
+
+  const selectedDayEmotionTotal = useMemo(
+    () => moodOrder.reduce((sum, id) => sum + (selectedDayEmotionCounts[id] ?? 0), 0),
+    [selectedDayEmotionCounts],
   );
 
   const selectedDateRecords = useMemo(
@@ -223,16 +228,25 @@ export default function CalendarScreen() {
             <View style={styles.selectedPreviewRow}>
               <Text style={styles.selectedPreviewDate}>{formatShortMd(selectedDate)}</Text>
               <View style={styles.previewBarWrap}>
-                {selectedDayPreviewColors.length === 0 ? (
+                {selectedDayEmotionTotal === 0 ? (
                   <View style={styles.previewBarEmpty} />
                 ) : (
                   <View style={styles.previewBarRow}>
-                    {selectedDayPreviewColors.map((bg, i) => (
-                      <View
-                        key={`pv-${selectedDate}-${i}`}
-                        style={[styles.previewSegment, { backgroundColor: bg }]}
-                      />
-                    ))}
+                    {moodOrder.map((emotionId) => {
+                      const n = selectedDayEmotionCounts[emotionId] ?? 0;
+                      return (
+                        <View
+                          key={`pv-${selectedDate}-${emotionId}`}
+                          style={[
+                            styles.previewSegment,
+                            {
+                              flex: n > 0 ? n : 0,
+                              backgroundColor: moodPalette[emotionId].bg,
+                            },
+                          ]}
+                        />
+                      );
+                    })}
                   </View>
                 )}
               </View>
@@ -403,8 +417,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(15, 23, 42, 0.08)',
   },
   previewSegment: {
-    flex: 1,
-    minWidth: 6,
+    minWidth: 0,
   },
   previewBarEmpty: {
     height: 20,

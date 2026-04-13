@@ -214,6 +214,10 @@ export default function TimelineScreen() {
     [canSelectHour],
   );
 
+  const clearTimelineHourSelection = useCallback(() => {
+    setSelectedTimelineHour(null);
+  }, []);
+
   useEffect(() => {
     setSelectedTimelineHour(null);
   }, [selectedDate]);
@@ -431,7 +435,6 @@ export default function TimelineScreen() {
         if (entry?.id) {
           if (firstGuideActiveRef.current) {
             handleFirstGuideSuccess(entry);
-            setSelectedTimelineHour(null);
             return;
           }
           const dk = selectedDate;
@@ -440,7 +443,6 @@ export default function TimelineScreen() {
           );
           const toastMsg = registerEmotionToastAfterLog(dk, dayList);
           if (toastMsg) flashEmotionToast(toastMsg);
-          setSelectedTimelineHour(null);
           if (memoPromptTimerRef.current) {
             clearTimeout(memoPromptTimerRef.current);
           }
@@ -524,6 +526,7 @@ export default function TimelineScreen() {
 
   const scrollToCurrentHour = useCallback(() => {
     if (!isToday) return;
+    if (selectedTimelineHour !== null) return;
     const h = new Date().getHours();
     const y = hourYRef.current[h];
     const rowH = hourRowHeightRef.current;
@@ -531,7 +534,7 @@ export default function TimelineScreen() {
     if (scrollRef.current == null || y == null || vh <= 0) return;
     const targetY = y - vh / 2 + rowH / 2;
     scrollRef.current.scrollTo({ y: Math.max(0, targetY), animated: false });
-  }, [isToday]);
+  }, [isToday, selectedTimelineHour]);
 
   useFocusEffect(
     useCallback(() => {
@@ -665,42 +668,49 @@ export default function TimelineScreen() {
       }
     >
       <View style={styles.timelineLayer}>
-        <View style={styles.titleBlock}>
-          <Text style={styles.pageTitle}>
-            {isToday ? '⭐ 오늘의 감정 기록' : '⭐ 감정 기록'}
-          </Text>
+        <Pressable
+          onPress={clearTimelineHourSelection}
+          style={styles.titleBlockPressable}
+          accessibilityRole="button"
+          accessibilityLabel="시간 선택 해제"
+        >
+          <View style={styles.titleBlock}>
+            <Text style={styles.pageTitle}>
+              {isToday ? '⭐ 오늘의 감정 기록' : '⭐ 감정 기록'}
+            </Text>
 
-          <View style={styles.dateNav}>
-            <Pressable
-              hitSlop={10}
-              onPress={() => shiftSelectedDateByDays(-1)}
-              accessibilityRole="button"
-              accessibilityLabel="어제"
-            >
-              <ChevronLeft size={22} color={notebook.inkMuted} />
-            </Pressable>
-            <View style={styles.dateNavCenter}>
-              <Text style={styles.date}>{dateLabel}</Text>
+            <View style={styles.dateNav}>
               <Pressable
-                style={styles.calendarJump}
-                onPress={() => navigation.navigate('Calendar')}
-                hitSlop={8}
+                hitSlop={10}
+                onPress={() => shiftSelectedDateByDays(-1)}
                 accessibilityRole="button"
-                accessibilityLabel="캘린더로 이동"
+                accessibilityLabel="어제"
               >
-                <Calendar size={18} color={notebook.inkMuted} strokeWidth={2} />
+                <ChevronLeft size={22} color={notebook.inkMuted} />
+              </Pressable>
+              <View style={styles.dateNavCenter}>
+                <Text style={styles.date}>{dateLabel}</Text>
+                <Pressable
+                  style={styles.calendarJump}
+                  onPress={() => navigation.navigate('Calendar')}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="캘린더로 이동"
+                >
+                  <Calendar size={18} color={notebook.inkMuted} strokeWidth={2} />
+                </Pressable>
+              </View>
+              <Pressable
+                hitSlop={10}
+                onPress={() => shiftSelectedDateByDays(1)}
+                accessibilityRole="button"
+                accessibilityLabel="내일"
+              >
+                <ChevronRight size={22} color={notebook.inkMuted} />
               </Pressable>
             </View>
-            <Pressable
-              hitSlop={10}
-              onPress={() => shiftSelectedDateByDays(1)}
-              accessibilityRole="button"
-              accessibilityLabel="내일"
-            >
-              <ChevronRight size={22} color={notebook.inkMuted} />
-            </Pressable>
           </View>
-        </View>
+        </Pressable>
         <ScrollView
           ref={scrollRef}
           style={styles.scroll}
@@ -726,6 +736,12 @@ export default function TimelineScreen() {
               onPressHourSlot={onPressHourSlot}
             />
           ))}
+          <Pressable
+            onPress={clearTimelineHourSelection}
+            style={styles.timelineScrollBottomTap}
+            accessibilityRole="button"
+            accessibilityLabel="시간 선택 해제"
+          />
         </ScrollView>
 
         {overlayVisible && activeHour !== null ? (
@@ -853,7 +869,7 @@ export default function TimelineScreen() {
               <View
                 style={[
                   styles.detailFooter,
-                  { paddingBottom: insets.bottom + 14 },
+                  { paddingBottom: insets.bottom + 16 },
                 ]}
               >
                 <Pressable
@@ -926,7 +942,7 @@ export default function TimelineScreen() {
               <View
                 style={[
                   styles.detailFooter,
-                  { paddingBottom: insets.bottom + 14 },
+                  { paddingBottom: insets.bottom + 16 },
                 ]}
               >
                 <Pressable
@@ -950,6 +966,15 @@ export default function TimelineScreen() {
   );
 }
 
+function countTitledMemos(entriesList) {
+  let n = 0;
+  for (const e of entriesList) {
+    const { title } = splitMemo(e.memo);
+    if ((title || '').trim()) n += 1;
+  }
+  return n;
+}
+
 function HourRowBlock({
   hour,
   hourEntries,
@@ -961,6 +986,7 @@ function HourRowBlock({
   onPressHourSlot,
 }) {
   const n = hourEntries.length;
+  const titledMemoCount = countTitledMemos(hourEntries);
 
   return (
     <View
@@ -986,15 +1012,10 @@ function HourRowBlock({
             {String(hour).padStart(2, '0')}:00
           </Text>
         </View>
-        <View
-          style={[
-            styles.chunkColFrame,
-            slotSelected && styles.hourSlotSelectedFrame,
-          ]}
-        >
+        <View style={styles.chunkColFrame}>
           <View style={styles.chunkCol}>
           <View style={styles.chunkRow} accessibilityLabel={`${String(hour).padStart(2, '0')}시 감정 줄`}>
-            <EntryStrip hourEntries={hourEntries} />
+            <EntryStrip hourEntries={hourEntries} stripSelected={slotSelected} />
           </View>
           {n > 0 ? (
             <Pressable
@@ -1004,7 +1025,11 @@ function HourRowBlock({
               accessibilityLabel={overlayOpen ? '메모 닫기' : '메모 보기'}
             >
               <Text style={styles.entrySummaryText}>
-                {overlayOpen ? '메모 닫기 ▲' : '메모 보기 ▼'}
+                {overlayOpen
+                  ? '메모 닫기 ▲'
+                  : titledMemoCount > 0
+                    ? `메모 보기 (${titledMemoCount}) ▼`
+                    : '메모 보기 ▼'}
               </Text>
             </Pressable>
           ) : null}
@@ -1016,7 +1041,7 @@ function HourRowBlock({
   );
 }
 
-function EntryStrip({ hourEntries }) {
+function EntryStrip({ hourEntries, stripSelected }) {
   const { sorted, visibleEntries } = useMemo(() => {
     const s = [...hourEntries].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
     const vis = s.length <= ROLLING_MOOD_WINDOW ? s : s.slice(-ROLLING_MOOD_WINDOW);
@@ -1024,14 +1049,22 @@ function EntryStrip({ hourEntries }) {
   }, [hourEntries]);
 
   if (sorted.length === 0) {
-    return <View style={[styles.chunk, styles.chunkEmpty]} />;
+    return (
+      <View
+        style={[
+          styles.chunk,
+          styles.chunkEmpty,
+          stripSelected && styles.emotionStripSelected,
+        ]}
+      />
+    );
   }
 
   if (sorted.length === 1) {
     const one = visibleEntries[0];
     const bg = paletteFor(one.emotionId).bg;
     return (
-      <View style={styles.entryStripMultiWrap}>
+      <View style={[styles.entryStripMultiWrap, stripSelected && styles.emotionStripSelected]}>
         <View style={[styles.moodFlowGradientFill, { backgroundColor: bg }]} />
         <LinearGradient
           colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0.1)']}
@@ -1049,7 +1082,7 @@ function EntryStrip({ hourEntries }) {
   const { colors: gradColors, locations: gradLocations } = rollingWindowGradientStops(bgColors);
 
   return (
-    <View style={styles.entryStripMultiWrap}>
+    <View style={[styles.entryStripMultiWrap, stripSelected && styles.emotionStripSelected]}>
       <LinearGradient
         colors={gradColors}
         locations={gradLocations}
@@ -1078,6 +1111,9 @@ function paletteFor(emotionId) {
 }
 
 const styles = StyleSheet.create({
+  titleBlockPressable: {
+    alignSelf: 'stretch',
+  },
   titleBlock: {
     paddingHorizontal: 20,
     paddingBottom: 16,
@@ -1116,6 +1152,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
+  timelineScrollBottomTap: {
+    minHeight: 160,
+    width: '100%',
+  },
   timelineLayer: {
     flex: 1,
     position: 'relative',
@@ -1128,13 +1168,9 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     minWidth: 0,
   },
-  hourSlotSelectedFrame: {
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderRadius: 17,
+  emotionStripSelected: {
     borderWidth: 2,
     borderColor: 'rgba(79, 70, 229, 0.5)',
-    backgroundColor: 'rgba(99, 102, 241, 0.06)',
   },
   hourRowPressable: {
     borderRadius: 12,
