@@ -149,7 +149,7 @@ export default function CalendarScreen() {
       case 'flutter':
         return '오늘은 설레는 감정이 가장 많이 남았어요';
       case 'calm':
-        return '오늘은 잔잔한 감정이 가장 많이 남았어요';
+        return '오늘은 평온한 감정이 가장 많이 남았어요';
       case 'gloom':
         return '오늘은 가라앉은 감정이 가장 많이 남았어요';
       case 'annoyed':

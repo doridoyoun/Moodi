@@ -68,7 +68,7 @@ export default function MonthlyFlowView() {
         >
         <Text style={styles.monthHeading}>{title}</Text>
         <Text style={styles.subtle}>
-          하루 기록의 감정 구성 · 좋음 → 설렘 → 잔잔 → 가라앉음 → 짜증 순
+          하루 기록의 감정 구성 · 좋음 → 설렘 → 평온 → 가라앉음 → 짜증 순
         </Text>
 
         <View style={styles.list}>

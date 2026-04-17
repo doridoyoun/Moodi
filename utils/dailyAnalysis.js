@@ -336,7 +336,7 @@ const TRIPLE_LINES = new Map(
     ['flutter|gloom|calm', '기대했던 하루였지만 중간에 조금 지쳤고, 결국 괜찮아진 하루'],
     ['annoyed|annoyed|annoyed', '계속해서 답답하고 힘들었던 하루'],
     ['calm|flutter|happy', '차분하게 시작해서 점점 기분이 좋아진 하루'],
-    ['calm|happy|happy', '잔잔하게 시작해 기분 좋게 마무리된 하루'],
+    ['calm|happy|happy', '평온하게 시작해 기분 좋게 마무리된 하루'],
     ['happy|calm|happy', '한결같이 편안한 기분이 이어진 하루'],
     ['gloom|gloom|gloom', '마음이 계속 무거웠던 하루'],
     ['flutter|flutter|flutter', '들뜬 마음이 끝까지 이어진 하루'],
@@ -346,79 +346,73 @@ const TRIPLE_LINES = new Map(
     ['gloom|happy|happy', '아침은 무겁지만 점차 밝아진 하루'],
     ['happy|gloom|calm', '좋은 시작 뒤에 잠시 가라앉았다가 안정된 하루'],
     ['flutter|happy|flutter', '기대와 즐거움이 번갈아 찾아온 하루'],
-    ['calm|gloom|happy', '잔잔하다가 잠시 가라앉았다가 다시 밝아진 하루'],
+    ['calm|gloom|happy', '평온하다가 잠시 가라앉았다가 다시 밝아진 하루'],
     ['annoyed|calm|happy', '답답함이 있었지만 마음이 풀리며 끝난 하루'],
   ].map(([k, v]) => [k, v]),
 );
 
 function oneLineSummary(first, dominant, last) {
-  // Tone + wording rules:
-  // - One sentence, ends with "하루네요"
-  // - Avoid: "흐름", "패턴", "변화", "무거운"
-  if (!first || !dominant || !last) return '잔잔하게 지나간 하루네요';
+  if (!first || !dominant || !last) return '평온한 하루였어요';
 
-  const pos = (id) => id === 'happy' || id === 'flutter';
-  const neg = (id) => id === 'gloom' || id === 'annoyed';
+  const isPos = (id) => id === 'happy' || id === 'flutter';
+  const isNeg = (id) => id === 'gloom' || id === 'annoyed';
+  const polarity = (id) => (isPos(id) ? 'pos' : isNeg(id) ? 'neg' : 'neutral');
 
   /** @type {number | null} */
-  const uniqueCount =
-    typeof oneLineSummary.uniqueCount === 'number' ? oneLineSummary.uniqueCount : null;
+  const uniqueCount = typeof oneLineSummary.uniqueCount === 'number' ? oneLineSummary.uniqueCount : null;
   /** @type {number | null} */
-  const switchCount =
-    typeof oneLineSummary.switchCount === 'number' ? oneLineSummary.switchCount : null;
+  const switchCount = typeof oneLineSummary.switchCount === 'number' ? oneLineSummary.switchCount : null;
   /** @type {string | null} */
-  const lateDominant =
-    typeof oneLineSummary.lateDominant === 'string' ? oneLineSummary.lateDominant : null;
+  const lateDominant = typeof oneLineSummary.lateDominant === 'string' ? oneLineSummary.lateDominant : null;
   /** @type {string | null} */
-  const earlyDominant =
-    typeof oneLineSummary.earlyDominant === 'string' ? oneLineSummary.earlyDominant : null;
+  const earlyDominant = typeof oneLineSummary.earlyDominant === 'string' ? oneLineSummary.earlyDominant : null;
   /** @type {number | null} */
-  const repRatio =
-    typeof oneLineSummary.repRatio === 'number' ? oneLineSummary.repRatio : null;
+  const repRatio = typeof oneLineSummary.repRatio === 'number' ? oneLineSummary.repRatio : null;
 
-  const uniq = uniqueCount ?? new Set([first, dominant, last].filter(Boolean)).size;
-  const switches = switchCount ?? ((first !== dominant ? 1 : 0) + (dominant !== last ? 1 : 0));
+  const firstId = normEmotionId(first);
+  const lastId = normEmotionId(last);
+  const domId = normEmotionId(dominant);
+  const earlyId = earlyDominant ? normEmotionId(earlyDominant) : null;
+  const lateId = lateDominant ? normEmotionId(lateDominant) : null;
 
-  // 1) High variability / mixed day
-  if (uniq >= 3 || switches >= 2) {
-    return switches >= 3 ? '기분이 자주 바뀐 하루네요' : '여러 감정이 오간 하루네요';
+  const uniq = uniqueCount ?? new Set([firstId, domId, lastId].filter(Boolean)).size;
+  const switches = switchCount ?? ((firstId !== domId ? 1 : 0) + (domId !== lastId ? 1 : 0));
+
+  // CASE 1: High variability (MOST IMPORTANT)
+  if (uniq >= 3 || switches >= 2) return '감정 기복이 큰 하루네요';
+
+  // CASE 2: Strong late emotion
+  // Treat lateDominant as "clear" when it matches the last emotion, or differs from earlyDominant.
+  if (lateId && (lateId === lastId || (earlyId && lateId !== earlyId))) {
+    if (lateId === 'happy') return '마지막엔 기분이 풀린 하루네요';
+    if (lateId === 'flutter') return '마지막엔 설렘이 남은 하루네요';
+    if (lateId === 'calm') return '평온한 하루네요';
+    if (lateId === 'gloom') return '뒤로 갈수록 조금 가라앉았네요';
+    if (lateId === 'annoyed') return '나중에는 짜증이 남았네요';
   }
 
-  // 2) Early vs late difference
-  if (first !== last) {
-    return switches >= 1 ? '뒤로 갈수록 분위기가 달라진 하루네요' : '초반과 후반의 분위기가 달랐던 하루네요';
+  // CASE 3: Clear contrast (optional)
+  if (earlyId && lateId && earlyId !== lateId) {
+    const earlyPol = polarity(earlyId);
+    const latePol = polarity(lateId);
+    if (earlyPol === 'pos' && latePol === 'neg') return '기분이 좋았는데 조금 가라앉았네요';
+    if (earlyPol === 'neg' && latePol === 'pos') return '중간에 기분이 조금 풀렸네요';
   }
 
-  // 3) Later mood stands out (prefer when late half differs from early half)
-  if (lateDominant && (!earlyDominant || lateDominant !== earlyDominant)) {
-    const id = normEmotionId(lateDominant);
-    if (id === 'flutter') return '마지막엔 설렘이 남은 하루네요';
-    if (id === 'happy') return '마지막엔 기분이 풀린 하루네요';
-    if (id === 'gloom') return '뒤로 갈수록 조금 가라앉은 하루네요';
-    if (id === 'annoyed') return '나중에는 짜증이 남은 하루네요';
-  }
-
-  // 4) Single dominant emotion (strict)
-  const dom = normEmotionId(dominant);
-  const ratioOk = repRatio != null ? repRatio >= 0.6 : false;
-  const directionOk =
-    first === last ||
-    (pos(first) && pos(last) && pos(dom)) ||
-    (neg(first) && neg(last) && neg(dom)) ||
-    (first === 'calm' && last === 'calm' && dom === 'calm');
-  if (ratioOk && switches <= 1 && directionOk) {
+  // CASE 4: TRUE single emotion (strict)
+  if (repRatio != null && repRatio >= 0.65 && uniq <= 2 && switches <= 1) {
     const map = {
       happy: '기분이 좋은 하루네요',
       flutter: '설렘이 느껴진 하루네요',
       calm: '평온한 하루네요',
-      gloom: '조금 가라앉은 하루네요',
-      annoyed: '짜증나는 일이 있었던 하루네요',
+      gloom: '조금 가라앉는 날이었네요',
+      annoyed: '짜증나는 일이 있었던 날이었네요',
     };
-    if (map[dom]) return map[dom];
+    if (map[domId]) return map[domId];
   }
 
-  // 5) Calm / low variation fallback
-  return '잔잔하게 지나간 하루네요';
+  // CASE 5: fallback
+  return domId === 'calm' ? '평온한 하루였어요' : '조용히 지나간 하루네요';
 }
 
 function dominantEmotionFromPoints(points) {

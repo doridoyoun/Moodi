@@ -14,7 +14,7 @@ export const notebook = {
 export const moodPalette = {
   happy: { label: '좋음', bg: '#fff3bf', border: '#f5d76e', ink: '#7a5c00' },
   flutter: { label: '설렘', bg: '#ffd6e8', border: '#f5a3c7', ink: '#8b2252' },
-  calm: { label: '잔잔', bg: '#d8f3e0', border: '#9fd4b0', ink: '#1f5c3a' },
+  calm: { label: '평온', bg: '#d8f3e0', border: '#9fd4b0', ink: '#1f5c3a' },
   gloom: { label: '가라앉음', bg: '#d6e8ff', border: '#9ec5f7', ink: '#1e3a5f' },
   annoyed: { label: '짜증', bg: '#ffd4cc', border: '#f0a090', ink: '#7a2e1f' },
 };

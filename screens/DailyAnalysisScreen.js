@@ -1,16 +1,19 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EmotionFlowGraph from '../components/analysis/EmotionFlowGraph';
 import { useMood } from '../src/context/MoodContext';
 import { notebook } from '../constants/theme';
-import { computeDailyAnalysis } from '../utils/dailyAnalysis';
+import { computeDailyAnalysis, emotionYValue, normEmotionId } from '../utils/dailyAnalysis';
 import { formatDateKeyForDisplay, getEntriesForDate, getEntryTimelineHour } from '../storage/timelineStateStorage';
 import { formatEntryTime, splitMemo } from '../utils/timelineEntryFormat';
+
+const MAX_SEGMENT_SIZE = 6;
 
 export default function DailyAnalysisScreen() {
   const insets = useSafeAreaInsets();
   const { entries, selectedDate } = useMood();
+  const [selectedSegmentIndex, setSelectedSegmentIndex] = useState(null);
 
   const analysis = useMemo(
     () => computeDailyAnalysis(entries, selectedDate),
@@ -31,6 +34,107 @@ export default function DailyAnalysisScreen() {
     () => [...dayEntries].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
     [dayEntries],
   );
+
+  useEffect(() => {
+    setSelectedSegmentIndex(null);
+  }, [selectedDate]);
+
+  const emotionSegments = useMemo(() => {
+    if (!daySorted.length) return [];
+    /** @type {{ emotionId: string, count: number, startCreatedAt: string, entries: any[] }[]} */
+    const segs = [];
+    /** @type {{ emotionId: string, entries: any[] } | null} */
+    let run = null;
+
+    const flushRunIntoChunks = () => {
+      if (!run || run.entries.length === 0) return;
+      const list = run.entries;
+      for (let i = 0; i < list.length; i += MAX_SEGMENT_SIZE) {
+        const chunk = list.slice(i, i + MAX_SEGMENT_SIZE);
+        if (!chunk.length) continue;
+        segs.push({
+          emotionId: run.emotionId,
+          count: chunk.length,
+          startCreatedAt: chunk[0].createdAt,
+          entries: chunk,
+        });
+      }
+    };
+
+    for (const e of daySorted) {
+      const eid = normEmotionId(e?.emotionId);
+      if (!run || run.emotionId !== eid) {
+        flushRunIntoChunks();
+        run = { emotionId: eid, entries: [e] };
+      } else {
+        run.entries.push(e);
+      }
+    }
+    flushRunIntoChunks();
+
+    return segs;
+  }, [daySorted]);
+
+  const segmentFlowGraph = useMemo(() => {
+    const n = emotionSegments.length;
+    if (n === 0) return { kind: 'single', points: [] };
+
+    const times = emotionSegments
+      .map((s) => Date.parse(s.startCreatedAt))
+      .filter((t) => Number.isFinite(t));
+    const minT = times.length ? Math.min(...times) : NaN;
+    const maxT = times.length ? Math.max(...times) : NaN;
+    const span = Number.isFinite(minT) && Number.isFinite(maxT) ? maxT - minT : 0;
+
+    const points = emotionSegments.map((seg, idx) => {
+      const t = Date.parse(seg.startCreatedAt);
+      const xRatio =
+        n === 1
+          ? 0.5
+          : Number.isFinite(t) && span > 0
+            ? Math.min(1, Math.max(0, (t - minT) / span))
+            : idx / (n - 1);
+      const count = seg.count;
+      const r = count <= 1 ? 5 : count <= 3 ? 7 : 9;
+      return {
+        emotionId: seg.emotionId,
+        yValue: emotionYValue(seg.emotionId),
+        xRatio,
+        r,
+        label: formatEntryTime(seg.startCreatedAt),
+      };
+    });
+    return { kind: n === 1 ? 'single' : n === 2 ? 'two' : 'multi', points };
+  }, [emotionSegments]);
+
+  const selectedSegment = useMemo(() => {
+    if (selectedSegmentIndex == null) return null;
+    const idx = Number(selectedSegmentIndex);
+    if (!Number.isFinite(idx) || idx < 0 || idx >= emotionSegments.length) return null;
+    return emotionSegments[idx] ?? null;
+  }, [emotionSegments, selectedSegmentIndex]);
+
+  const selectedMemoItems = useMemo(() => {
+    if (!selectedSegment) return [];
+    const list = selectedSegment.entries || [];
+    return list
+      .filter((e) => (e?.memo || '').trim().length > 0)
+      .map((e) => {
+        const parts = splitMemo(e.memo || '');
+        const title = (parts.title || '').trim();
+        const body = (parts.content || '').trim() || (e.memo || '').trim();
+        const firstLine = body.split('\n').map((x) => x.trim()).find(Boolean) || '';
+        const titleText =
+          title ||
+          (firstLine.length > 36 ? `${firstLine.slice(0, 36).trim()}…` : firstLine) ||
+          '메모';
+        return {
+          id: e.id,
+          timeText: formatEntryTime(e.createdAt),
+          titleText,
+        };
+      });
+  }, [selectedSegment]);
 
   const changePointText = useMemo(() => {
     if (daySorted.length < 2) return '감정이 크게 바뀌진 않았어요';
@@ -105,56 +209,6 @@ export default function DailyAnalysisScreen() {
     return '아침에 기록이 많았어요';
   }, [daySorted]);
 
-  const missedMomentItems = useMemo(() => {
-    if (!daySorted.length) return [];
-
-    const rep = analysis?.representativeMemoSource;
-    let repId = null;
-    if (rep?.createdAt && rep?.memo) {
-      const hit = daySorted.find(
-        (e) =>
-          e.createdAt === rep.createdAt &&
-          (e.memo || '').trim() === (rep.memo || '').trim() &&
-          (e.emotionId || '') === (rep.emotionId || ''),
-      );
-      if (hit?.id) repId = hit.id;
-    }
-
-    const memoEntries = daySorted.filter((e) => {
-      const memo = (e.memo || '').trim();
-      if (!memo) return false;
-      if (repId && e.id === repId) return false;
-      return true;
-    });
-
-    const ranked = [...memoEntries].sort((a, b) => {
-      const aParts = splitMemo(a.memo || '');
-      const bParts = splitMemo(b.memo || '');
-      const aHasTitle = (aParts.title || '').trim().length > 0 ? 1 : 0;
-      const bHasTitle = (bParts.title || '').trim().length > 0 ? 1 : 0;
-      if (bHasTitle !== aHasTitle) return bHasTitle - aHasTitle;
-
-      const aLen = (a.memo || '').trim().length;
-      const bLen = (b.memo || '').trim().length;
-      if (bLen !== aLen) return bLen - aLen;
-
-      return Date.parse(b.createdAt) - Date.parse(a.createdAt);
-    });
-
-    return ranked.slice(0, 3).map((e) => {
-      const parts = splitMemo(e.memo || '');
-      const title = (parts.title || '').trim();
-      const body = (parts.content || '').trim() || (e.memo || '').trim();
-      const firstLine = body.split('\n').map((x) => x.trim()).find(Boolean) || '';
-      const titleText = title || (firstLine.length > 36 ? `${firstLine.slice(0, 36).trim()}…` : firstLine) || '메모';
-      return {
-        id: e.id,
-        timeText: formatEntryTime(e.createdAt),
-        titleText,
-      };
-    });
-  }, [analysis?.representativeMemoSource, daySorted]);
-
   return (
     <ScrollView
       style={styles.scroll}
@@ -173,7 +227,13 @@ export default function DailyAnalysisScreen() {
         <>
           <View style={styles.card}>
             <Text style={styles.cardTitle}>감정 흐름</Text>
-            <EmotionFlowGraph flowGraph={analysis.flowGraph} />
+            <EmotionFlowGraph
+              flowGraph={segmentFlowGraph}
+              selectedIndex={selectedSegmentIndex}
+              onSelectIndex={(idx) => {
+                setSelectedSegmentIndex((cur) => (cur === idx ? null : idx));
+              }}
+            />
           </View>
 
           <View style={styles.insightSection}>
@@ -186,16 +246,23 @@ export default function DailyAnalysisScreen() {
             <Text style={styles.insightText}>{concentrationText}</Text>
           </View>
 
-          <View style={styles.insightSection}>
-            <Text style={styles.insightLabel}>놓친 순간 다시 보기</Text>
+          <View style={styles.segmentDetailSection}>
+            <Text style={styles.insightLabel}>이때 남긴 기록</Text>
 
-            {missedMomentItems.length === 0 ? (
-              <Text style={styles.missedEmpty}>다시 볼 기록이 아직 없어요</Text>
+            {!selectedSegment ? (
+              <Text style={styles.segmentDetailHint}>
+                그래프의 점을 눌러 그때의 기록을 볼 수 있어요
+              </Text>
+            ) : selectedMemoItems.length === 0 ? (
+              <Text style={styles.segmentDetailHint}>이 구간에는 남긴 메모가 없어요</Text>
             ) : (
-              missedMomentItems.map((item) => (
-                <View key={item.id} style={styles.missedItem}>
-                  <Text style={styles.missedTime}>{item.timeText}</Text>
-                  <Text style={styles.missedTitle}>{item.titleText}</Text>
+              selectedMemoItems.map((item, idx) => (
+                <View
+                  key={item.id}
+                  style={[styles.segmentMemoItem, idx === 0 ? { borderTopWidth: 0 } : null]}
+                >
+                  <Text style={styles.segmentMemoTime}>{item.timeText}</Text>
+                  <Text style={styles.segmentMemoTitle}>{item.titleText}</Text>
                 </View>
               ))
             )}
@@ -283,26 +350,34 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: notebook.ink,
   },
-  missedItem: {
+  segmentDetailSection: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: notebook.gridLine,
+  },
+  segmentDetailHint: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: notebook.inkLight,
+  },
+  segmentMemoItem: {
     paddingVertical: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: notebook.gridLine,
   },
-  missedTime: {
+  segmentMemoTime: {
     fontSize: 12,
     fontWeight: '600',
     color: notebook.inkLight,
     marginBottom: 4,
   },
-  missedTitle: {
+  segmentMemoTitle: {
     fontSize: 15,
     fontWeight: '700',
     color: notebook.ink,
     lineHeight: 22,
-  },
-  missedEmpty: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: notebook.inkLight,
   },
 });

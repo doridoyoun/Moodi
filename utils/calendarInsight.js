@@ -19,7 +19,7 @@ const ID_TO_CANONICAL = {
 const LABEL_KO = {
   happy: '좋음',
   excited: '설렘',
-  calm: '잔잔',
+  calm: '평온',
   down: '가라앉음',
   angry: '짜증',
 };

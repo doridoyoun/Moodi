@@ -44,10 +44,14 @@ function getOneLineDailySummary(dayEntries) {
 
   /** @type {Record<string, number>} */
   const counts = {};
+  /** @type {number[]} */
+  const hourCounts = Array.from({ length: 24 }, () => 0);
   for (const e of sorted) {
     const id = e?.emotionId;
     if (typeof id !== 'string') continue;
     counts[id] = (counts[id] ?? 0) + 1;
+    const h = typeof e?.hour === 'number' ? e.hour : null;
+    if (h != null && h >= 0 && h <= 23) hourCounts[h] += 1;
   }
 
   const total = sorted.length;
@@ -78,18 +82,30 @@ function getOneLineDailySummary(dayEntries) {
     if (prev && cur && prev !== cur) switchesAfter16 += 1;
   }
 
-  const countThreshold = Math.max(2, Math.ceil(total * 0.5));
+  // 1) time concentration (strongest)
+  // Prefer a narrow 3-hour window (e.g. 16시~18시), otherwise fall back to afternoon/evening.
+  if (total >= 3) {
+    let bestStart = null;
+    let bestCount = 0;
+    for (let start = 0; start <= 21; start += 1) {
+      const c = hourCounts[start] + hourCounts[start + 1] + hourCounts[start + 2];
+      if (c > bestCount) {
+        bestCount = c;
+        bestStart = start;
+      }
+    }
+    const strongWindow = bestStart !== null && bestCount >= Math.max(2, Math.ceil(total * 0.6));
+    if (strongWindow) {
+      return `${bestStart}시~${bestStart + 2}시에 기록이 몰려 있어요`;
+    }
+  }
 
-  // 1) time concentration
-  if (byBucket.afternoon >= countThreshold) return '오후에 기록이 몰려 있어요';
-  if (byBucket.evening >= countThreshold) return '저녁에 감정이 자주 남아 있어요';
-  if (byBucket.morning >= countThreshold) return '아침에 기록이 몰려 있어요';
+  const bucketThreshold = Math.max(2, Math.ceil(total * 0.5));
+  if (byBucket.afternoon >= bucketThreshold) return '오후에 기록이 많아요';
+  if (byBucket.evening >= bucketThreshold) return '저녁에 기록이 많아요';
 
-  // 2) repeated changes
-  if (switchesAfter16 >= 2) return '16시 이후 감정이 자주 바뀌었어요';
-  if (switches >= 3) return '최근 감정이 조금 흔들리고 있어요';
-
-  // 3) current mixed state
+  // 2) record count (default when there is no strong concentration)
+  // 3) mixed emotions (prefer when multiple emotion types exist)
   if (uniqueEmotions >= 3) return '지금까지 여러 감정이 함께 남아 있어요';
   if (uniqueEmotions === 2) {
     const topTwo = Object.entries(counts)
@@ -104,9 +120,10 @@ function getOneLineDailySummary(dayEntries) {
     return '지금까지 여러 감정이 함께 남아 있어요';
   }
 
-  // 4) fallback
-  if (total >= 1) return `오늘 기록이 ${total}개 있어요`;
-  return '오늘 기록이 차곡차곡 쌓이고 있어요';
+  // 4) multiple changes (only when strong)
+  if (switches >= 3 && switchesAfter16 >= 2) return '16시 이후 감정이 자주 바뀌었어요';
+
+  return `오늘 기록이 ${total}개 있어요`;
 }
 
 /**
@@ -187,7 +204,6 @@ export default function TimelineScreen() {
   const overlayFade = useRef(new Animated.Value(0)).current;
   const overlaySlide = useRef(new Animated.Value(10)).current;
   const dailySummaryOpacity = useRef(new Animated.Value(0)).current;
-  const timelineInsightOpacity = useRef(new Animated.Value(0)).current;
   const memoPromptTimerRef = useRef(null);
   const emotionToastTimerRef = useRef(null);
   const [emotionToastText, setEmotionToastText] = useState(null);
@@ -601,32 +617,6 @@ export default function TimelineScreen() {
   const dayEntries = useMemo(() => getEntriesForDate(entries, selectedDate), [entries, selectedDate]);
   const dailySummaryText = useMemo(() => getOneLineDailySummary(dayEntries), [dayEntries]);
 
-  const todayEntries = useMemo(() => getEntriesForDate(entries, selectedDate), [entries, selectedDate]);
-  const insightText = useMemo(() => {
-    if (todayEntries.length === 0) return '기록이 쌓이면 흐름을 더 잘 볼 수 있어요';
-    if (todayEntries.length === 1) return '아직은 첫 감정이 기록되어 있어요';
-
-    const unique = new Set();
-    let after18 = 0;
-    for (const e of todayEntries) {
-      if (typeof e?.emotionId === 'string') unique.add(e.emotionId);
-      if (typeof e?.hour === 'number' && e.hour >= 18) after18 += 1;
-    }
-
-    if (unique.size >= 3) return '감정이 여러 번 달라졌어요';
-    if (after18 >= 2) return '저녁에 감정 기록이 많았어요';
-    return '오늘은 비교적 잔잔한 흐름이에요';
-  }, [todayEntries]);
-
-  useEffect(() => {
-    timelineInsightOpacity.setValue(0);
-    Animated.timing(timelineInsightOpacity, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-  }, [timelineInsightOpacity, insightText]);
-
   const scrollRef = useRef(null);
   const hourYRef = useRef({});
   const hourRowHeightRef = useRef(54);
@@ -846,12 +836,6 @@ export default function TimelineScreen() {
               onPressHourSlot={onPressHourSlot}
             />
           ))}
-
-          <Animated.View style={{ opacity: timelineInsightOpacity }}>
-            <View style={styles.timelineInsightWrap}>
-              <Text style={styles.timelineInsightText}>{insightText}</Text>
-            </View>
-          </Animated.View>
 
           <Pressable
             onPress={clearTimelineHourSelection}
@@ -1080,16 +1064,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
-  },
-  timelineInsightWrap: {
-    marginTop: 16,
-    marginBottom: 8,
-    alignItems: 'center',
-  },
-  timelineInsightText: {
-    fontSize: 12,
-    color: notebook.inkLight,
-    textAlign: 'center',
   },
   timelineScrollBottomTap: {
     minHeight: 160,

@@ -6,14 +6,14 @@
 import { moodPalette } from '../constants/theme';
 import { addDaysToDateKey, getEntryTimelineDateKey, toDateKey } from '../storage/timelineStateStorage';
 
-/** @typedef {'좋음'|'설렘'|'잔잔'|'가라앉음'|'짜증'} EmotionLabel */
+/** @typedef {'좋음'|'설렘'|'평온'|'가라앉음'|'짜증'} EmotionLabel */
 
-const LABEL_ORDER = /** @type {const} */ (['좋음', '설렘', '잔잔', '가라앉음', '짜증']);
+const LABEL_ORDER = /** @type {const} */ (['좋음', '설렘', '평온', '가라앉음', '짜증']);
 
 const DOMINANT_SELECTED_MSG = {
   좋음: '오늘은 기분 좋은 순간이 많이 남아 있어요',
   설렘: '오늘은 설레는 순간이 자주 보였어요',
-  잔잔: '오늘은 전체적으로 잔잔한 흐름이 느껴져요',
+  평온: '오늘은 전체적으로 평온한 흐름이 느껴져요',
   가라앉음: '오늘은 조금 차분하게 가라앉은 순간이 많았어요',
   짜증: '오늘은 예민했던 순간이 자주 남아 있어요',
 };
@@ -21,7 +21,7 @@ const DOMINANT_SELECTED_MSG = {
 const DOMINANT_RECENT_MSG = {
   좋음: '요즘은 기분 좋은 순간이 자주 쌓이고 있어요',
   설렘: '요즘은 설레는 감정이 자주 보이고 있어요',
-  잔잔: '요즘은 차분한 흐름이 이어지고 있어요',
+  평온: '요즘은 평온한 흐름이 이어지고 있어요',
   가라앉음: '요즘은 조금 가라앉은 순간이 자주 보이고 있어요',
   짜증: '요즘은 예민한 순간이 조금 늘어난 것 같아요',
 };
