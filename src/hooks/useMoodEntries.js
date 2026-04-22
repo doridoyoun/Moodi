@@ -26,16 +26,20 @@ export function useMoodEntries({ entries, setEntries, selectedDate, setSelectedD
     setSelectedDate((prev) => addDaysToDateKey(prev, delta));
   }, [setSelectedDate]);
 
-  const createEntry = useCallback(({ emotionId, memo = '', dateKey, hour }) => {
+  const createEntry = useCallback(({ emotionId, memo = '', dateKey, hour, imageUri } = {}) => {
     const p = parseDateKey(dateKey);
     if (!p) return null;
-    const entry = createMoodEntry({
+    const input = {
       emotionId,
       memo: typeof memo === 'string' ? memo : '',
       createdAt: new Date().toISOString(),
       timelineDateKey: dateKey,
       timelineHour: hour,
-    });
+    };
+    if (typeof imageUri === 'string' && imageUri.trim().length > 0) {
+      input.imageUri = imageUri.trim();
+    }
+    const entry = createMoodEntry(input);
     setEntries((prev) =>
       [...prev, entry].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
     );
@@ -53,7 +57,15 @@ export function useMoodEntries({ entries, setEntries, selectedDate, setSelectedD
     );
   }, [setEntries]);
 
-  const setRepresentativeOverrideForDate = useCallback((entryId, dateKey, enabled) => {
+  // Back-compat: old signature (entryId, dateKey, enabled:boolean) and new signature (dateKey, entryId).
+  const setRepresentativeOverrideForDate = useCallback((a, b, c) => {
+    const enabled = typeof c === 'boolean' ? c : true;
+    const dateKey = typeof c === 'boolean' ? b : a;
+    const entryId = typeof c === 'boolean' ? a : b;
+
+    if (typeof dateKey !== 'string' || !parseDateKey(dateKey)) return;
+    if (typeof entryId !== 'string' || entryId.trim().length === 0) return;
+
     setEntries((prev) => {
       const next = prev.map((e) => {
         if (getEntryTimelineDateKey(e) !== dateKey) return e;

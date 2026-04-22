@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Surface } from 'react-native-paper';
@@ -18,6 +18,16 @@ import { computeDailyAnalysis } from '../utils/dailyAnalysis';
 import { formatEntryTime, splitMemo } from '../utils/timelineEntryFormat';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+function normalizeImageUri(value) {
+  const s = typeof value === 'string' ? value.trim() : '';
+  if (!s) return null;
+  // Accept common RN/Expo URI schemes.
+  if (/^(https?:|file:|content:|ph:|assets-library:|blob:|data:)/i.test(s)) return s;
+  // Also allow bare absolute paths on some platforms.
+  if (/^[a-zA-Z]:\\/.test(s)) return s;
+  return null;
+}
 
 function buildMonthGrid(year, monthIndex) {
   const first = new Date(year, monthIndex, 1);
@@ -50,8 +60,10 @@ function formatShortMd(dateKey) {
 
 export default function CalendarScreen() {
   const navigation = useNavigation();
-  const { entries, selectedDate, setSelectedDate } = useMood();
+  const { entries, selectedDate, setSelectedDate, setRepresentativeOverrideForDate } = useMood();
   const [cursor, setCursor] = useState(() => new Date());
+  const [repPhotoFailed, setRepPhotoFailed] = useState(false);
+  const [oneLinePickerVisible, setOneLinePickerVisible] = useState(false);
 
   useEffect(() => {
     const p = parseDateKey(selectedDate);
@@ -89,10 +101,7 @@ export default function CalendarScreen() {
     [selectedDayEmotionCounts],
   );
 
-  const analysis = useMemo(
-    () => computeDailyAnalysis(entries, selectedDate),
-    [entries, selectedDate],
-  );
+  const analysis = computeDailyAnalysis(entries, selectedDate);
 
   const summaryText = useMemo(() => {
     const s = typeof analysis?.oneLineSummary === 'string' ? analysis.oneLineSummary.trim() : '';
@@ -103,17 +112,8 @@ export default function CalendarScreen() {
     analysis?.representativeEmotion && typeof analysis.representativeEmotion === 'string'
       ? analysis.representativeEmotion
       : null;
+
   const memoSource = analysis?.representativeMemoSource ?? null;
-
-  const repMemoRaw =
-    analysis?.representativeMemo && typeof analysis.representativeMemo === 'string'
-      ? analysis.representativeMemo
-      : '';
-  const hasRepresentativeMemo = repMemoRaw.trim().length > 0;
-  const repMemoParts = repMemoRaw ? splitMemo(repMemoRaw) : { title: '', content: '' };
-  const repMemoTitle = (repMemoParts.title || '').trim();
-  const repMemoBody = (repMemoParts.content || '').trim();
-
   const memoEmotionId =
     memoSource?.emotionId && typeof memoSource.emotionId === 'string' ? memoSource.emotionId : null;
   const memoEmotionLabel =
@@ -123,21 +123,36 @@ export default function CalendarScreen() {
       ? formatEntryTime(memoSource.createdAt)
       : '';
 
-  const repCardTitle = useMemo(() => {
-    if (repMemoTitle) return repMemoTitle;
-    const src = repMemoBody || repMemoRaw.trim();
-    if (src) {
-      const oneLine = src.split('\n').map((x) => x.trim()).find(Boolean) || '';
-      const clipped = oneLine.length > 30 ? `${oneLine.slice(0, 30).trim()}…` : oneLine;
-      return clipped || (memoEmotionLabel ? `${memoEmotionLabel}` : '');
-    }
-    return memoEmotionLabel ? `${memoEmotionLabel}` : '';
-  }, [memoEmotionLabel, repMemoBody, repMemoRaw, repMemoTitle]);
-
-  const repPhotoUri =
+  const representativeMemo =
+    analysis?.representativeMemo && typeof analysis.representativeMemo === 'string'
+      ? analysis.representativeMemo
+      : null;
+  const representativePhoto =
     analysis?.representativePhotoUri && typeof analysis.representativePhotoUri === 'string'
       ? analysis.representativePhotoUri
-      : '';
+      : null;
+
+  const hasRepresentativeMemo = Boolean(representativeMemo && representativeMemo.trim().length > 0);
+
+  const repMemoParts = representativeMemo ? splitMemo(representativeMemo) : { title: '', content: '' };
+  const repMemoTitle = (repMemoParts.title || '').trim();
+  const repMemoBody = (repMemoParts.content || '').trim();
+
+  const repCardTitle = useMemo(() => {
+    if (repMemoTitle) return repMemoTitle;
+    const src = repMemoBody || (representativeMemo || '').trim();
+    if (!src) return '';
+    const oneLine = src.split('\n').map((x) => x.trim()).find(Boolean) || '';
+    return oneLine.length > 30 ? `${oneLine.slice(0, 30).trim()}…` : oneLine;
+  }, [repMemoBody, repMemoTitle, representativeMemo]);
+
+  const repPhotoUri = representativePhoto || '';
+
+  const repPhotoUriNormalized = useMemo(() => normalizeImageUri(repPhotoUri), [repPhotoUri]);
+
+  useEffect(() => {
+    setRepPhotoFailed(false);
+  }, [repPhotoUriNormalized]);
 
   const repEmotionLabel =
     repEmotionId && moodPalette[repEmotionId] ? moodPalette[repEmotionId].label : '';
@@ -163,14 +178,36 @@ export default function CalendarScreen() {
     setCursor((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
   };
 
-  const goToTimeline = (day) => {
+  const onPressDayCell = (day) => {
     const key = dateKeyForDay(year, monthIndex, day);
     setSelectedDate(key);
-    const tabNav = navigation.getParent();
-    if (tabNav) {
-      tabNav.navigate('Timeline');
-    }
   };
+
+  const dayEntries = useMemo(() => getEntriesForDate(entries, selectedDate), [entries, selectedDate]);
+  const daySorted = useMemo(
+    () => [...dayEntries].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
+    [dayEntries],
+  );
+  const oneLineCandidates = useMemo(() => {
+    return daySorted
+      .map((e) => {
+        const memoRaw = typeof e?.memo === 'string' ? e.memo.trim() : '';
+        const parts = splitMemo(memoRaw);
+        const title = (parts.title || '').trim();
+        const content = (parts.content || '').trim();
+        const firstLine = content.split('\n').map((x) => x.trim()).find(Boolean) || '';
+
+        if (!title && !firstLine) return null;
+
+        return {
+          id: e?.id ?? `${e?.createdAt || ''}-${e?.emotionId || ''}`,
+          entryId: e?.id ?? null,
+          timeText: formatEntryTime(e?.createdAt),
+          preview: title || firstLine,
+        };
+      })
+      .filter(Boolean);
+  }, [daySorted]);
 
   return (
     <NotebookLayout>
@@ -240,7 +277,7 @@ export default function CalendarScreen() {
               return (
                 <View key={`d-${day}`} style={styles.cell}>
                   <Pressable
-                    onPress={() => goToTimeline(day)}
+                    onPress={() => onPressDayCell(day)}
                     style={({ pressed }) => [
                       styles.dayCell,
                       isTodayCell && !isSelectedCell && styles.dayCellToday,
@@ -316,36 +353,80 @@ export default function CalendarScreen() {
             </Pressable>
           ) : null}
 
-          {hasRepresentativeMemo ? (
-            <View style={styles.repCardWrap}>
-              <View style={styles.repCardHeader}>
-                <Text style={styles.repCardEmotion}>{memoEmotionLabel}</Text>
-                <Text style={styles.repCardTime}>{memoTimeText}</Text>
-              </View>
-
-              {repCardTitle ? <Text style={styles.repCardTitle}>{repCardTitle}</Text> : null}
-
-              {repPhotoUri ? (
-                <Image
-                  source={{ uri: repPhotoUri }}
-                  style={styles.repCardPhoto}
-                  resizeMode="cover"
-                  accessibilityLabel="대표 사진"
-                />
-              ) : null}
+          <Pressable
+            onPress={() => setOneLinePickerVisible(true)}
+            style={({ pressed }) => [styles.repCardWrap, pressed && { opacity: 0.92 }]}
+            accessibilityRole="button"
+            accessibilityLabel="오늘의 한 줄 선택"
+          >
+            <View style={styles.repCardHeader}>
+              <Text style={styles.repCardEmotion}>오늘의 한 줄</Text>
+              {memoTimeText ? <Text style={styles.repCardTime}>{memoTimeText}</Text> : null}
             </View>
-          ) : repEmotionId ? (
-            <View style={styles.repCardWrap}>
-              <View style={styles.repCardHeader}>
-                <Text style={styles.repCardEmotion}>{repEmotionLabel}</Text>
-              </View>
+
+            {hasRepresentativeMemo ? (
+              <>
+                {repCardTitle ? <Text style={styles.repCardTitle}>{repCardTitle}</Text> : null}
+                {repPhotoUriNormalized && !repPhotoFailed ? (
+                  <Image
+                    source={{ uri: repPhotoUriNormalized }}
+                    style={styles.repCardPhoto}
+                    resizeMode="cover"
+                    accessibilityLabel="오늘의 한 줄 사진"
+                    onError={() => setRepPhotoFailed(true)}
+                  />
+                ) : null}
+              </>
+            ) : repEmotionId ? (
               <Text style={styles.repCardTitle}>{repEmotionFallbackText}</Text>
+            ) : (
+              <Text style={styles.repEmptyText}>오늘의 한 줄을 선택해보세요</Text>
+            )}
+          </Pressable>
+
+          <Modal
+            visible={oneLinePickerVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setOneLinePickerVisible(false)}
+          >
+            <View style={styles.oneLineModalRoot}>
+              <Pressable
+                style={styles.oneLineModalBackdrop}
+                onPress={() => setOneLinePickerVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="닫기"
+              />
+              <View style={styles.oneLineModalCard}>
+                <Text style={styles.oneLineModalTitle}>오늘의 한 줄</Text>
+                <Text style={styles.oneLineModalSub}>오늘 기록 중 하나를 선택하세요</Text>
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
+                  {oneLineCandidates.length === 0 ? (
+                    <Text style={styles.oneLineModalEmpty}>선택할 메모가 아직 없어요</Text>
+                  ) : (
+                    oneLineCandidates.map((item) => (
+                      <Pressable
+                        key={item.id}
+                        onPress={() => {
+                          if (!item.entryId) return;
+                          setRepresentativeOverrideForDate(selectedDate, item.entryId);
+                          setOneLinePickerVisible(false);
+                        }}
+                        style={({ pressed }) => [styles.oneLineItem, pressed && { opacity: 0.88 }]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${item.timeText} 선택`}
+                      >
+                        <Text style={styles.oneLineItemTime}>{item.timeText}</Text>
+                        <Text style={styles.oneLineItemText} numberOfLines={2}>
+                          {item.preview}
+                        </Text>
+                      </Pressable>
+                    ))
+                  )}
+                </ScrollView>
+              </View>
             </View>
-          ) : (
-            <View style={styles.repCardWrap}>
-              <Text style={styles.repEmptyText}>이 날의 대표 순간이 아직 없어요</Text>
-            </View>
-          )}
+          </Modal>
 
           <View style={styles.legend}>
             {moodOrder.map((k) => {
@@ -580,6 +661,68 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: notebook.inkLight,
     textAlign: 'center',
+  },
+  oneLineModalRoot: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  oneLineModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  oneLineModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 14,
+    maxHeight: '78%',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: notebook.gridLine,
+  },
+  oneLineModalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: notebook.ink,
+    textAlign: 'center',
+  },
+  oneLineModalSub: {
+    marginTop: 6,
+    marginBottom: 12,
+    fontSize: 12,
+    fontWeight: '600',
+    color: notebook.inkMuted,
+    textAlign: 'center',
+  },
+  oneLineModalEmpty: {
+    textAlign: 'center',
+    color: notebook.inkLight,
+    paddingVertical: 18,
+    fontWeight: '600',
+  },
+  oneLineItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: notebook.gridLine,
+  },
+  oneLineItemTime: {
+    width: 48,
+    fontSize: 12,
+    color: notebook.inkLight,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  oneLineItemText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    lineHeight: 20,
+    color: notebook.ink,
+    fontWeight: '600',
   },
   legend: {
     flexDirection: 'row',

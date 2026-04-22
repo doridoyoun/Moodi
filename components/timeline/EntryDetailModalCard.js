@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import { Image, Keyboard, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { CloudRain, Flame, Heart, Leaf, Smile, X } from 'lucide-react-native';
 import CenteredKeyboardFormModal from '../CenteredKeyboardFormModal';
@@ -15,6 +15,14 @@ const moodIcons = {
   annoyed: Flame,
 };
 
+function normalizeImageUri(value) {
+  const s = typeof value === 'string' ? value.trim() : '';
+  if (!s) return null;
+  if (/^(https?:|file:|content:|ph:|assets-library:|blob:|data:)/i.test(s)) return s;
+  if (/^[a-zA-Z]:\\/.test(s)) return s;
+  return null;
+}
+
 export default function EntryDetailModalCard({
   visible,
   entry,
@@ -26,17 +34,21 @@ export default function EntryDetailModalCard({
   detailEditContent,
   setDetailEditContent,
   bottomInset,
+  dateKey,
   onClose,
   onRequestClose,
   onBeginEdit,
   onCancelEdit,
   onSaveEdit,
   onConfirmDelete,
-  isRepresentativeOverride = false,
-  onToggleRepresentativeOverride,
+  setRepresentativeOverrideForDate,
   detailEditImageUri,
   setDetailEditImageUri,
 }) {
+  const [viewPhotoFailed, setViewPhotoFailed] = useState(false);
+  const [editPhotoFailed, setEditPhotoFailed] = useState(false);
+  const [manageExpanded, setManageExpanded] = useState(false);
+
   const split = entry ? splitMemo(entry.memo) : { title: '', content: '' };
   const pal = entry ? moodPalette[entry.emotionId] ?? moodPalette.happy : moodPalette.happy;
   const emotionLabel = entry ? pal.label : '';
@@ -59,12 +71,25 @@ export default function EntryDetailModalCard({
     setDetailEditImageUri?.(null);
   }, [setDetailEditImageUri]);
 
-  const viewPhotoUri =
-    entry?.imageUri && String(entry.imageUri).trim().length > 0 ? entry.imageUri.trim() : null;
-  const editPhotoUri =
-    typeof detailEditImageUri === 'string' && detailEditImageUri.trim().length > 0
-      ? detailEditImageUri.trim()
-      : null;
+  const viewPhotoUri = useMemo(() => normalizeImageUri(entry?.imageUri), [entry?.imageUri]);
+  const editPhotoUri = useMemo(() => normalizeImageUri(detailEditImageUri), [detailEditImageUri]);
+  const entryDateKey = useMemo(() => {
+    const dk = typeof entry?.timelineDateKey === 'string' ? entry.timelineDateKey : '';
+    if (dk) return dk;
+    return typeof dateKey === 'string' ? dateKey : '';
+  }, [dateKey, entry?.timelineDateKey]);
+
+  useEffect(() => {
+    setViewPhotoFailed(false);
+  }, [viewPhotoUri, entry?.id]);
+
+  useEffect(() => {
+    setEditPhotoFailed(false);
+  }, [editPhotoUri]);
+
+  useEffect(() => {
+    setManageExpanded(false);
+  }, [visible, entry?.id, isDetailEditing]);
 
   return (
     <CenteredKeyboardFormModal
@@ -73,7 +98,7 @@ export default function EntryDetailModalCard({
       onBackdropPress={isDetailEditing ? onCancelEdit : onClose}
       bottomInset={bottomInset}
       backdropColor="rgba(15, 23, 42, 0.35)"
-      maxHeightRatio={0.92}
+      maxHeightRatio={0.8}
     >
       <View style={styles.card} pointerEvents="auto">
         <Pressable
@@ -86,65 +111,46 @@ export default function EntryDetailModalCard({
           <X size={22} color={notebook.inkMuted} strokeWidth={2} />
         </Pressable>
 
-        {entry && !isDetailEditing ? (
-          <>
-            <View style={styles.bodyBlock}>
-              <View style={styles.viewMeta}>
-                <EmotionDisplayToken
-                  emotionId={entry.emotionId}
-                  size="detail"
-                  showTime={false}
-                  compact
-                />
-                <View style={styles.viewMetaText}>
-                  <Text style={[styles.emotionLabel, { color: pal.ink }]}>{emotionLabel}</Text>
-                  <Text style={styles.timeText}>{formatEntryTime(entry.createdAt)}</Text>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {entry && !isDetailEditing ? (
+            <>
+              <View style={styles.bodyBlock}>
+                <View style={styles.viewMeta}>
+                  <EmotionDisplayToken
+                    emotionId={entry.emotionId}
+                    size="detail"
+                    showTime={false}
+                    compact
+                  />
+                  <View style={styles.viewMetaText}>
+                    <Text style={[styles.emotionLabel, { color: pal.ink }]}>{emotionLabel}</Text>
+                    <Text style={styles.timeText}>{formatEntryTime(entry.createdAt)}</Text>
+                  </View>
                 </View>
+                {split.title ? <Text style={styles.title}>{split.title}</Text> : null}
+                {split.content ? (
+                  <Text style={styles.bodyText}>{split.content}</Text>
+                ) : !split.title ? (
+                  <Text style={styles.bodyMuted}>(내용 없음)</Text>
+                ) : null}
+                {viewPhotoUri && !viewPhotoFailed ? (
+                  <Image
+                    source={{ uri: viewPhotoUri }}
+                    style={styles.viewPhoto}
+                    resizeMode="cover"
+                    onError={() => setViewPhotoFailed(true)}
+                  />
+                ) : null}
               </View>
-              {split.title ? <Text style={styles.title}>{split.title}</Text> : null}
-              {split.content ? (
-                <Text style={styles.bodyText}>{split.content}</Text>
-              ) : !split.title ? (
-                <Text style={styles.bodyMuted}>(내용 없음)</Text>
-              ) : null}
-              {viewPhotoUri ? (
-                <Image source={{ uri: viewPhotoUri }} style={styles.viewPhoto} resizeMode="cover" />
-              ) : null}
-            </View>
-            {typeof onToggleRepresentativeOverride === 'function' ? (
-              <View style={styles.overrideRow}>
-                <View style={styles.overrideTextCol}>
-                  <Text style={styles.overrideTitle}>오늘의 대표 메모</Text>
-                  <Text style={styles.overrideSub}>하루 분석에 이 기록을 씁니다</Text>
-                </View>
-                <Switch
-                  accessibilityLabel="오늘의 대표 메모로 설정"
-                  value={isRepresentativeOverride}
-                  onValueChange={onToggleRepresentativeOverride}
-                  trackColor={{ false: notebook.gridLine, true: 'rgba(22, 163, 74, 0.35)' }}
-                  thumbColor={isRepresentativeOverride ? '#16a34a' : '#f4f4f5'}
-                />
-              </View>
-            ) : null}
-            <View style={styles.footer}>
-              <Pressable
-                style={({ pressed }) => [styles.btnSecondary, pressed && { opacity: 0.88 }]}
-                onPress={onBeginEdit}
-              >
-                <Text style={styles.btnSecondaryText}>수정</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.btnDanger, pressed && { opacity: 0.88 }]}
-                onPress={() => onConfirmDelete(entry.id)}
-              >
-                <Text style={styles.btnDangerText}>삭제</Text>
-              </Pressable>
-            </View>
-          </>
-        ) : null}
+            </>
+          ) : null}
 
-        {entry && isDetailEditing ? (
-          <>
+          {entry && isDetailEditing ? (
             <View style={styles.bodyEdit}>
               <View style={styles.editEmotionRow}>
                 {moodOrder.map((key) => {
@@ -188,8 +194,13 @@ export default function EntryDetailModalCard({
                 maxLength={500}
               />
               <Text style={styles.photoHint}>사진은 메모에 최대 1장 붙일 수 있어요</Text>
-              {editPhotoUri ? (
-                <Image source={{ uri: editPhotoUri }} style={styles.editPhoto} resizeMode="cover" />
+              {editPhotoUri && !editPhotoFailed ? (
+                <Image
+                  source={{ uri: editPhotoUri }}
+                  style={styles.editPhoto}
+                  resizeMode="cover"
+                  onError={() => setEditPhotoFailed(true)}
+                />
               ) : null}
               <View style={styles.photoActions}>
                 <Pressable
@@ -212,27 +223,87 @@ export default function EntryDetailModalCard({
                 ) : null}
               </View>
             </View>
-            <View style={styles.footer}>
-              <Pressable
-                style={({ pressed }) => [styles.btnSecondary, pressed && { opacity: 0.88 }]}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  onCancelEdit();
-                }}
-              >
-                <Text style={styles.btnSecondaryText}>취소</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.btnPrimary, pressed && { opacity: 0.9 }]}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  onSaveEdit();
-                }}
-              >
-                <Text style={styles.btnPrimaryText}>저장</Text>
-              </Pressable>
-            </View>
-          </>
+          ) : null}
+        </ScrollView>
+
+        {entry ? (
+          <View style={[styles.footer, { paddingBottom: Math.max(bottomInset ?? 0, 16) }]}>
+            {!isDetailEditing ? (
+              <View style={styles.manageWrap}>
+                <Pressable
+                  style={({ pressed }) => [styles.manageBtn, pressed && { opacity: 0.88 }]}
+                  onPress={() => setManageExpanded((v) => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel="이 기록 관리하기"
+                >
+                  <Text style={styles.manageBtnText}>이 기록 관리하기</Text>
+                </Pressable>
+
+                {manageExpanded ? (
+                  <View style={styles.manageActions}>
+                    <Pressable
+                      style={({ pressed }) => [styles.manageActionItem, pressed && { opacity: 0.85 }]}
+                      onPress={() => {
+                        setManageExpanded(false);
+                        onBeginEdit?.();
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel="수정"
+                    >
+                      <Text style={styles.manageActionText}>수정</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={({ pressed }) => [styles.manageActionItem, pressed && { opacity: 0.85 }]}
+                      onPress={() => {
+                        setManageExpanded(false);
+                        if (entry?.id) onConfirmDelete?.(entry.id);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel="삭제"
+                    >
+                      <Text style={[styles.manageActionText, styles.manageDangerText]}>삭제</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={({ pressed }) => [styles.manageActionItem, pressed && { opacity: 0.85 }]}
+                      onPress={() => {
+                        if (!entry?.id) return;
+                        if (!entryDateKey) return;
+                        setRepresentativeOverrideForDate?.(entryDateKey, entry.id);
+                        setManageExpanded(false);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel="오늘의 한 줄로 선택"
+                    >
+                      <Text style={styles.manageActionText}>오늘의 한 줄로 선택</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <>
+                <Pressable
+                  style={({ pressed }) => [styles.btnSecondary, pressed && { opacity: 0.88 }]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    onCancelEdit();
+                  }}
+                >
+                  <Text style={styles.btnSecondaryText}>취소</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.btnPrimary, pressed && { opacity: 0.9 }]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    onSaveEdit();
+                  }}
+                >
+                  <Text style={styles.btnPrimaryText}>저장</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
         ) : null}
       </View>
     </CenteredKeyboardFormModal>
@@ -243,8 +314,7 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 400,
-    maxHeight: '88%',
-    borderRadius: 16,
+    borderRadius: 22,
     backgroundColor: '#fff',
     overflow: 'hidden',
     shadowColor: '#000',
@@ -252,6 +322,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 20,
     elevation: 12,
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
   closeBtn: {
     position: 'absolute',
@@ -264,13 +337,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bodyBlock: {
-    maxHeight: 420,
     paddingTop: 44,
     paddingHorizontal: 18,
     paddingBottom: 12,
   },
   bodyEdit: {
-    maxHeight: 420,
     paddingTop: 44,
     paddingHorizontal: 18,
     paddingBottom: 12,
@@ -315,44 +386,56 @@ const styles = StyleSheet.create({
     color: notebook.inkLight,
     fontStyle: 'italic',
   },
-  overrideRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    marginHorizontal: 0,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: notebook.gridLine,
-    backgroundColor: 'rgba(247,250,252,0.9)',
-  },
-  overrideTextCol: {
-    flex: 1,
-    minWidth: 0,
-  },
-  overrideTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: notebook.ink,
-  },
-  overrideSub: {
-    marginTop: 3,
-    fontSize: 12,
-    fontWeight: '500',
-    color: notebook.inkLight,
-    lineHeight: 17,
-  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingTop: 14,
+    paddingBottom: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: notebook.gridLine,
-    backgroundColor: 'rgba(255,255,255,0.98)',
+    backgroundColor: '#fff',
+  },
+  manageWrap: {
+    flex: 1,
+  },
+  manageBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: notebook.gridLine,
+    backgroundColor: notebook.bg,
+  },
+  manageBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: notebook.inkMuted,
+  },
+  manageActions: {
+    marginTop: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: notebook.gridLine,
+    backgroundColor: '#fff',
+  },
+  manageActionItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: notebook.gridLine,
+  },
+  manageActionText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: notebook.ink,
+    textAlign: 'center',
+  },
+  manageDangerText: {
+    color: '#b91c1c',
   },
   btnSecondary: {
     flex: 1,

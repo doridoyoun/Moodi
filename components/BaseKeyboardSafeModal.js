@@ -75,7 +75,7 @@ export default function BaseKeyboardSafeModal({
     <ScrollView
       style={[
         styles.scroll,
-        maxScrollH != null ? { maxHeight: maxScrollH } : { flex: 1, minHeight: 0 },
+        maxScrollH != null ? { maxHeight: maxScrollH } : { maxHeight: WINDOW_H * 0.8 },
         scrollStyle,
       ]}
       contentContainerStyle={scrollContentStyle}
@@ -130,6 +130,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'stretch',
+    paddingVertical: 24,
   },
   hostBottomSheet: {
     flex: 1,
@@ -149,7 +150,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   scrollContentCentered: {
-    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
