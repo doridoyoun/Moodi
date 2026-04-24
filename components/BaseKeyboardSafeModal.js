@@ -40,7 +40,7 @@ export default function BaseKeyboardSafeModal({
   const bottomPad = Math.max(bottomInset, 12);
   const dismiss = onBackdropPress ?? onRequestClose;
 
-  const maxScrollH =
+  const maxBodyH =
     typeof maxHeightRatio === 'number' && maxHeightRatio > 0 && maxHeightRatio <= 1
       ? WINDOW_H * maxHeightRatio
       : undefined;
@@ -64,6 +64,7 @@ export default function BaseKeyboardSafeModal({
         styles.directHost,
         variant === 'centered' && styles.directHostCentered,
         variant === 'bottom-sheet' && styles.directHostBottom,
+        maxBodyH != null ? { maxHeight: maxBodyH } : { maxHeight: WINDOW_H * 0.8 },
         { paddingBottom: bottomPad },
       ]}
     >
@@ -75,7 +76,7 @@ export default function BaseKeyboardSafeModal({
     <ScrollView
       style={[
         styles.scroll,
-        maxScrollH != null ? { maxHeight: maxScrollH } : { maxHeight: WINDOW_H * 0.8 },
+        maxBodyH != null ? { maxHeight: maxBodyH } : { maxHeight: WINDOW_H * 0.8 },
         scrollStyle,
       ]}
       contentContainerStyle={scrollContentStyle}

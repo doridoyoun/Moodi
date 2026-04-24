@@ -36,6 +36,8 @@ import {
 import { countTitledMemos, joinMemo, paletteFor, splitMemo } from '../utils/timelineEntryFormat';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const TAB_BAR_HEIGHT = 88;
+const EMOTION_FOOTER_HEIGHT = 104;
 
 function getOneLineDailySummary(dayEntries) {
   if (!Array.isArray(dayEntries) || dayEntries.length === 0) return '아직 기록이 없어요';
@@ -683,111 +685,10 @@ export default function TimelineScreen() {
     };
   }, [isToday, selectedDate, scrollToCurrentHour]);
 
-  const emotionBarBottomPad = Math.max(insets.bottom, 12);
+  const emotionBarBottomPad = 12;
 
   return (
-    <NotebookLayout
-      footer={
-        <View style={[styles.footerWrap, { paddingBottom: emotionBarBottomPad }]}>
-          {memoPromptEntryId ? (
-            <View style={styles.memoPromptCard}>
-              <Text style={styles.memoPromptLine}>감정이 기록됐어요</Text>
-              <Text style={styles.memoPromptSub}>메모를 추가할까요?</Text>
-              <Pressable
-                onPress={onMemoPromptAdd}
-                style={({ pressed }) => [
-                  styles.memoPromptBtn,
-                  pressed && { opacity: 0.88 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="메모 추가"
-              >
-                <Text style={styles.memoPromptBtnText}>메모 추가</Text>
-              </Pressable>
-            </View>
-          ) : null}
-          <View style={styles.footerHints}>
-            <Text style={styles.footerHintText}>
-              {isToday
-                ? '아래 감정을 눌러 오늘의 기분을 남겨요'
-                : '시간대를 선택한 뒤 감정을 눌러 그날의 기분을 남겨요'}
-            </Text>
-          </View>
-          {firstGuideActive && isToday && !isFutureDateView ? (
-            <Text style={styles.firstGuideHint}>오늘의 감정을 가볍게 남겨보세요</Text>
-          ) : null}
-          {emotionToastText ? (
-            <View style={styles.emotionToastBanner} accessibilityLiveRegion="polite">
-              <Text style={styles.emotionToastText}>{emotionToastText}</Text>
-            </View>
-          ) : null}
-          {firstFollowUpVisible ? (
-            <View style={styles.firstFollowRow}>
-              <Text style={styles.firstFollowQuestion}>이 순간을 조금 더 남겨볼까요?</Text>
-              <View style={styles.firstFollowActions}>
-                <Pressable
-                  onPress={() => {
-                    const id = firstFollowUpEntryIdRef.current;
-                    setFirstFollowUpVisible(false);
-                    if (!id) return;
-                    if (memoPromptTimerRef.current) {
-                      clearTimeout(memoPromptTimerRef.current);
-                    }
-                    setMemoPromptEntryId(id);
-                    memoPromptTimerRef.current = setTimeout(() => {
-                      memoPromptTimerRef.current = null;
-                      setMemoPromptEntryId((cur) => (cur === id ? null : cur));
-                    }, 3000);
-                  }}
-                  style={({ pressed }) => [styles.firstFollowBtn, pressed && { opacity: 0.8 }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="남기기"
-                >
-                  <Text style={styles.firstFollowBtnText}>남기기</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setFirstFollowUpVisible(false)}
-                  style={({ pressed }) => [styles.firstFollowBtnSecondary, pressed && { opacity: 0.75 }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="나중에"
-                >
-                  <Text style={styles.firstFollowBtnSecondaryText}>나중에</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
-          <Animated.View
-            style={[
-              styles.quickEmotionRow,
-              isFutureDateView && styles.quickEmotionRowDisabled,
-              firstGuideActive && isToday && !isFutureDateView ? { transform: [{ scale: pulseScale }] } : null,
-            ]}
-          >
-            {moodOrder.map((key) => {
-              const Icon = moodIcons[key];
-              const m = moodPalette[key];
-              return (
-                <Pressable
-                  key={key}
-                  disabled={isFutureDateView}
-                  accessibilityRole="button"
-                  accessibilityLabel={m.label}
-                  onPress={() => onQuickEmotion(key)}
-                  style={({ pressed }) => [
-                    styles.quickFab,
-                    { backgroundColor: m.bg, borderColor: m.border },
-                    pressed && !isFutureDateView && { opacity: 0.85 },
-                  ]}
-                >
-                  <Icon size={22} color={m.ink} strokeWidth={2} />
-                  <Text style={[styles.quickFabLabel, { color: m.ink }]}>{m.label}</Text>
-                </Pressable>
-              );
-            })}
-          </Animated.View>
-        </View>
-      }
-    >
+    <NotebookLayout>
       <View style={styles.timelineLayer}>
         <Pressable
           onPress={clearTimelineHourSelection}
@@ -841,7 +742,10 @@ export default function TimelineScreen() {
         <ScrollView
           ref={scrollRef}
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: EMOTION_FOOTER_HEIGHT + 24 },
+          ]}
           showsVerticalScrollIndicator
           onLayout={(e) => {
             scrollViewportHRef.current = e.nativeEvent.layout.height;
@@ -886,6 +790,104 @@ export default function TimelineScreen() {
           onDismissBackdrop={closeEntryOverlay}
           onSelectEntry={openDetailFromOverlay}
         />
+
+        <View style={styles.footerContainer}>
+          <View style={[styles.footerInner, { paddingBottom: emotionBarBottomPad }]}>
+            {memoPromptEntryId ? (
+              <View style={styles.memoPromptCard}>
+                <Text style={styles.memoPromptLine}>감정이 기록됐어요</Text>
+                <Text style={styles.memoPromptSub}>메모를 추가할까요?</Text>
+                <Pressable
+                  onPress={onMemoPromptAdd}
+                  style={({ pressed }) => [styles.memoPromptBtn, pressed && { opacity: 0.88 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="메모 추가"
+                >
+                  <Text style={styles.memoPromptBtnText}>메모 추가</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            <View style={styles.footerHints}>
+              <Text style={styles.footerHintText}>
+                {isToday
+                  ? '아래 감정을 눌러 오늘의 기분을 남겨요'
+                  : '시간대를 선택한 뒤 감정을 눌러 그날의 기분을 남겨요'}
+              </Text>
+            </View>
+            {firstGuideActive && isToday && !isFutureDateView ? (
+              <Text style={styles.firstGuideHint}>오늘의 감정을 가볍게 남겨보세요</Text>
+            ) : null}
+            {emotionToastText ? (
+              <View style={styles.emotionToastBanner} accessibilityLiveRegion="polite">
+                <Text style={styles.emotionToastText}>{emotionToastText}</Text>
+              </View>
+            ) : null}
+            {firstFollowUpVisible ? (
+              <View style={styles.firstFollowRow}>
+                <Text style={styles.firstFollowQuestion}>이 순간을 조금 더 남겨볼까요?</Text>
+                <View style={styles.firstFollowActions}>
+                  <Pressable
+                    onPress={() => {
+                      const id = firstFollowUpEntryIdRef.current;
+                      setFirstFollowUpVisible(false);
+                      if (!id) return;
+                      if (memoPromptTimerRef.current) {
+                        clearTimeout(memoPromptTimerRef.current);
+                      }
+                      setMemoPromptEntryId(id);
+                      memoPromptTimerRef.current = setTimeout(() => {
+                        memoPromptTimerRef.current = null;
+                        setMemoPromptEntryId((cur) => (cur === id ? null : cur));
+                      }, 3000);
+                    }}
+                    style={({ pressed }) => [styles.firstFollowBtn, pressed && { opacity: 0.8 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="남기기"
+                  >
+                    <Text style={styles.firstFollowBtnText}>남기기</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setFirstFollowUpVisible(false)}
+                    style={({ pressed }) => [styles.firstFollowBtnSecondary, pressed && { opacity: 0.75 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="나중에"
+                  >
+                    <Text style={styles.firstFollowBtnSecondaryText}>나중에</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+            <Animated.View
+              style={[
+                styles.quickEmotionRow,
+                isFutureDateView && styles.quickEmotionRowDisabled,
+                firstGuideActive && isToday && !isFutureDateView ? { transform: [{ scale: pulseScale }] } : null,
+              ]}
+            >
+              {moodOrder.map((key) => {
+                const Icon = moodIcons[key];
+                const m = moodPalette[key];
+                return (
+                  <Pressable
+                    key={key}
+                    disabled={isFutureDateView}
+                    accessibilityRole="button"
+                    accessibilityLabel={m.label}
+                    onPress={() => onQuickEmotion(key)}
+                    style={({ pressed }) => [
+                      styles.quickFab,
+                      { backgroundColor: m.bg, borderColor: m.border },
+                      pressed && !isFutureDateView && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Icon size={22} color={m.ink} strokeWidth={2} />
+                    <Text style={[styles.quickFabLabel, { color: m.ink }]}>{m.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </Animated.View>
+          </View>
+        </View>
       </View>
 
       <EntryDetailModalCard
@@ -1293,9 +1295,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: notebook.inkLight,
   },
-  footerWrap: {
-    paddingHorizontal: 12,
+  footerContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: notebook.gridLine,
+  },
+  footerInner: {
     paddingTop: 10,
+    paddingHorizontal: 12,
+    minHeight: EMOTION_FOOTER_HEIGHT,
   },
   footerHints: {
     marginBottom: 10,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { CloudRain, Flame, Heart, Leaf, Smile, X } from 'lucide-react-native';
 import CenteredKeyboardFormModal from '../CenteredKeyboardFormModal';
 import { moodOrder, moodPalette, notebook } from '../../constants/theme';
@@ -46,6 +47,7 @@ export default function EntryDetailModalCard({
   const [viewPhotoFailed, setViewPhotoFailed] = useState(false);
   const [editPhotoFailed, setEditPhotoFailed] = useState(false);
   const [manageExpanded, setManageExpanded] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   const split = entry ? splitMemo(entry.memo) : { title: '', content: '' };
   const pal = entry ? moodPalette[entry.emotionId] ?? moodPalette.happy : moodPalette.happy;
@@ -58,12 +60,26 @@ export default function EntryDetailModalCard({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [3, 4],
-      quality: 0.85,
+      quality: 0.9,
     });
     if (result.canceled) return;
-    const uri = result.assets?.[0]?.uri;
+    const asset = result.assets?.[0];
+    const uri = asset?.uri;
     if (typeof uri !== 'string' || uri.trim().length === 0) return;
-    setDetailEditImageUri?.(uri);
+
+    try {
+      const w = typeof asset?.width === 'number' ? asset.width : null;
+      const actions = w && w > 800 ? [{ resize: { width: 800 } }] : [];
+      const manipulated = await ImageManipulator.manipulateAsync(uri, actions, {
+        compress: 0.8,
+        format: ImageManipulator.SaveFormat.JPEG,
+      });
+      const nextUri = typeof manipulated?.uri === 'string' && manipulated.uri.trim().length > 0 ? manipulated.uri : uri;
+      setDetailEditImageUri?.(nextUri);
+    } catch (e) {
+      console.log('IMAGE MANIPULATE ERROR:', e);
+      setDetailEditImageUri?.(uri);
+    }
   }, [setDetailEditImageUri]);
 
   const clearPhoto = useCallback(() => {
@@ -90,6 +106,19 @@ export default function EntryDetailModalCard({
     setManageExpanded(false);
   }, [visible, entry?.id, isDetailEditing]);
 
+  useEffect(() => {
+    if (!visible || !isDetailEditing) {
+      setKeyboardOpen(false);
+      return;
+    }
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    return () => {
+      showSub?.remove?.();
+      hideSub?.remove?.();
+    };
+  }, [visible, isDetailEditing]);
+
   return (
     <CenteredKeyboardFormModal
       visible={visible}
@@ -97,7 +126,8 @@ export default function EntryDetailModalCard({
       onBackdropPress={isDetailEditing ? onCancelEdit : onClose}
       bottomInset={bottomInset}
       backdropColor="rgba(15, 23, 42, 0.35)"
-      maxHeightRatio={0.8}
+      maxHeightRatio={keyboardOpen ? 0.62 : 0.8}
+      scrollEnabled={false}
     >
       <View style={styles.card} pointerEvents="auto">
         <Pressable
@@ -110,74 +140,73 @@ export default function EntryDetailModalCard({
           <X size={22} color={notebook.inkMuted} strokeWidth={2} />
         </Pressable>
 
+        {entry && isDetailEditing ? (
+          <View style={styles.editHeader}>
+            <View style={styles.editEmotionRow}>
+              {moodOrder.map((key) => {
+                const Icon = moodIcons[key];
+                const m = moodPalette[key];
+                const selected = detailEditEmotion === key;
+                return (
+                  <Pressable
+                    key={key}
+                    accessibilityRole="button"
+                    accessibilityLabel={m.label}
+                    onPress={() => setDetailEditEmotion(key)}
+                    style={({ pressed }) => [
+                      styles.editFab,
+                      { backgroundColor: m.bg, borderColor: m.border },
+                      selected && styles.editFabSelected,
+                      !selected && { opacity: 0.45 },
+                      pressed && { opacity: 0.88 },
+                    ]}
+                  >
+                    <Icon size={17} color={m.ink} strokeWidth={2} />
+                    <Text style={[styles.editFabLabel, { color: m.ink }]}>{m.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
         <ScrollView
-          style={{ flex: 1 }}
+          style={styles.contentScroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
           {entry && !isDetailEditing ? (
-            <>
-              <View style={styles.bodyBlock}>
-                <View style={styles.viewMeta}>
-                  <EmotionDisplayToken
-                    emotionId={entry.emotionId}
-                    size="detail"
-                    showTime={false}
-                    compact
-                  />
-                  <View style={styles.viewMetaText}>
-                    <Text style={[styles.emotionLabel, { color: pal.ink }]}>{emotionLabel}</Text>
-                    <Text style={styles.timeText}>{formatEntryTime(entry.createdAt)}</Text>
-                  </View>
+            <View style={styles.bodyBlock}>
+              <View style={styles.viewMeta}>
+                <EmotionDisplayToken emotionId={entry.emotionId} size="detail" showTime={false} compact />
+                <View style={styles.viewMetaText}>
+                  <Text style={[styles.emotionLabel, { color: pal.ink }]}>{emotionLabel}</Text>
+                  <Text style={styles.timeText}>{formatEntryTime(entry.createdAt)}</Text>
                 </View>
-                {split.title ? <Text style={styles.title}>{split.title}</Text> : null}
-                {split.content ? (
-                  <Text style={styles.bodyText}>{split.content}</Text>
-                ) : !split.title ? (
-                  <Text style={styles.bodyMuted}>(내용 없음)</Text>
-                ) : null}
-                {viewPhotoUri && !viewPhotoFailed ? (
-                  <Image
-                    source={{ uri: viewPhotoUri }}
-                    style={styles.viewPhoto}
-                    resizeMode="cover"
-                    onError={() => {
-                      console.log('IMAGE ERROR:', viewPhotoUri);
-                      setViewPhotoFailed(true);
-                    }}
-                  />
-                ) : null}
               </View>
-            </>
+              {split.title ? <Text style={styles.title}>{split.title}</Text> : null}
+              {split.content ? (
+                <Text style={styles.bodyText}>{split.content}</Text>
+              ) : !split.title ? (
+                <Text style={styles.bodyMuted}>(내용 없음)</Text>
+              ) : null}
+              {viewPhotoUri && !viewPhotoFailed ? (
+                <Image
+                  source={{ uri: viewPhotoUri }}
+                  style={styles.viewPhoto}
+                  resizeMode="cover"
+                  onError={() => {
+                    console.log('IMAGE ERROR:', viewPhotoUri);
+                    setViewPhotoFailed(true);
+                  }}
+                />
+              ) : null}
+            </View>
           ) : null}
 
           {entry && isDetailEditing ? (
             <View style={styles.bodyEdit}>
-              <View style={styles.editEmotionRow}>
-                {moodOrder.map((key) => {
-                  const Icon = moodIcons[key];
-                  const m = moodPalette[key];
-                  const selected = detailEditEmotion === key;
-                  return (
-                    <Pressable
-                      key={key}
-                      accessibilityRole="button"
-                      accessibilityLabel={m.label}
-                      onPress={() => setDetailEditEmotion(key)}
-                      style={({ pressed }) => [
-                        styles.editFab,
-                        { backgroundColor: m.bg, borderColor: m.border },
-                        selected && styles.editFabSelected,
-                        pressed && { opacity: 0.88 },
-                      ]}
-                    >
-                      <Icon size={17} color={m.ink} strokeWidth={2} />
-                      <Text style={[styles.editFabLabel, { color: m.ink }]}>{m.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
               <TextInput
                 style={styles.titleInput}
                 placeholder="제목 (선택)"
@@ -322,11 +351,21 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     backgroundColor: '#fff',
     overflow: 'hidden',
+    flexShrink: 1,
+    maxHeight: '100%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 20,
     elevation: 12,
+  },
+  editHeader: {
+    paddingTop: 44,
+    paddingHorizontal: 18,
+    paddingBottom: 8,
+  },
+  contentScroll: {
+    flex: 1,
   },
   scrollContent: {
     paddingBottom: 20,
@@ -347,7 +386,6 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   bodyEdit: {
-    paddingTop: 44,
     paddingHorizontal: 18,
     paddingBottom: 12,
   },
@@ -503,7 +541,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   editFabSelected: {
-    borderWidth: 2.5,
+    borderWidth: 3,
+    opacity: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.12,
@@ -542,7 +581,7 @@ const styles = StyleSheet.create({
   viewPhoto: {
     width: '100%',
     aspectRatio: 3 / 4,
-    borderRadius: 12,
+    borderRadius: 16,
     marginTop: 14,
     backgroundColor: notebook.bg,
   },
@@ -554,9 +593,11 @@ const styles = StyleSheet.create({
     color: notebook.inkLight,
   },
   editPhoto: {
-    width: '100%',
+    width: 130,
     aspectRatio: 3 / 4,
     borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 12,
     marginBottom: 10,
     backgroundColor: notebook.bg,
   },

@@ -1,20 +1,18 @@
 import { StyleSheet, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import NotebookBackground from './NotebookBackground';
 import NotebookHeader from './NotebookHeader';
 import { notebook } from '../constants/theme';
 
 export default function NotebookLayout({ children, footer }) {
-  const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, 12);
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.root}>
         <NotebookBackground />
         <NotebookHeader />
-        <View style={[styles.body, !footer && { paddingBottom: bottomPad }]}>{children}</View>
+        <View style={styles.body}>{children}</View>
         {footer ? (
-          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <View style={[styles.footer, { paddingBottom: 12 }]}>
             {footer}
           </View>
         ) : null}
