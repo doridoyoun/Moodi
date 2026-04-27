@@ -14,7 +14,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { CloudRain, Flame, Heart, Leaf, Smile, X } from 'lucide-react-native';
 import CenteredKeyboardFormModal from '../CenteredKeyboardFormModal';
 import { moodOrder, moodPalette, notebook } from '../../constants/theme';
-import { formatEntryTime, splitMemo } from '../../utils/timelineEntryFormat';
+import { formatEntryDisplayTime, splitMemo } from '../../utils/timelineEntryFormat';
 import EmotionDisplayToken from './EmotionDisplayToken';
 
 const moodIcons = {
@@ -60,6 +60,7 @@ export default function EntryDetailModalCard({
   const split = entry ? splitMemo(entry.memo) : { title: '', content: '' };
   const pal = entry ? moodPalette[entry.emotionId] ?? moodPalette.happy : moodPalette.happy;
   const emotionLabel = entry ? pal.label : '';
+  const timeText = formatEntryDisplayTime(entry);
 
   const pickPhoto = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -178,7 +179,7 @@ export default function EntryDetailModalCard({
                 <EmotionDisplayToken emotionId={entry.emotionId} size="detail" showTime={false} compact />
                 <View style={styles.viewMetaText}>
                   <Text style={[styles.emotionLabel, { color: pal.ink }]}>{emotionLabel}</Text>
-                  <Text style={styles.timeText}>{formatEntryTime(entry.createdAt)}</Text>
+                  <Text style={styles.timeText}>{timeText}</Text>
                 </View>
               </View>
               {split.title ? <Text style={styles.title}>{split.title}</Text> : null}

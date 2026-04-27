@@ -5,7 +5,7 @@ import { useMood } from '../src/context/MoodContext';
 import { notebook } from '../constants/theme';
 import { computeDailyAnalysis, normEmotionId } from '../utils/dailyAnalysis';
 import { formatDateKeyForDisplay, getEntriesForDate, getEntryTimelineHour } from '../storage/timelineStateStorage';
-import { formatEntryTime, paletteFor, splitMemo } from '../utils/timelineEntryFormat';
+import { formatEntryDisplayTime, paletteFor, splitMemo } from '../utils/timelineEntryFormat';
 
 function normalizeImageUri(value) {
   const s = typeof value === 'string' ? value.trim() : '';
@@ -55,7 +55,13 @@ export default function DailyAnalysisScreen() {
   );
 
   const daySorted = useMemo(
-    () => [...dayEntries].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
+    () =>
+      [...dayEntries].sort((a, b) => {
+        const ha = getEntryTimelineHour(a);
+        const hb = getEntryTimelineHour(b);
+        if (ha !== hb) return ha - hb;
+        return Date.parse(a.createdAt) - Date.parse(b.createdAt);
+      }),
     [dayEntries],
   );
 
@@ -87,7 +93,7 @@ export default function DailyAnalysisScreen() {
       return {
         id: e?.id ?? `${e?.createdAt || ''}-${e?.emotionId || ''}`,
         entryId: e?.id ?? null,
-        timeText: formatEntryTime(e?.createdAt),
+        timeText: formatEntryDisplayTime(e),
         emotionId,
         hasMemo,
         titleText,
@@ -130,7 +136,7 @@ export default function DailyAnalysisScreen() {
         id: e?.id ?? `${e?.createdAt || ''}-${e?.emotionId || ''}`,
         entryId: e?.id ?? null,
         createdAt: typeof e?.createdAt === 'string' ? e.createdAt : '',
-        timeText: formatEntryTime(e?.createdAt),
+        timeText: formatEntryDisplayTime(e),
         emotionId: normEmotionId(e?.emotionId),
         hasMemo,
         memoPreview,
@@ -260,7 +266,9 @@ export default function DailyAnalysisScreen() {
                         />
                       </View>
                       {isSelected ? (
-                        <Text style={styles.flowRhythmSelectedTime}>{item.timeText}</Text>
+                        <Text style={styles.flowRhythmSelectedTime} numberOfLines={1}>
+                          {item.timeText}
+                        </Text>
                       ) : null}
                     </Pressable>
                   );
@@ -425,7 +433,7 @@ export default function DailyAnalysisScreen() {
                   <Text style={styles.readOnlyEmotion}>
                     {paletteFor(normEmotionId(readOnlyEntrySnapshot?.emotionId)).label}
                   </Text>
-                  <Text style={styles.readOnlyTime}>{formatEntryTime(readOnlyEntrySnapshot?.createdAt)}</Text>
+                  <Text style={styles.readOnlyTime}>{formatEntryDisplayTime(readOnlyEntrySnapshot)}</Text>
                 </View>
                 <Pressable
                   onPress={closeReadOnlyModal}
@@ -558,6 +566,9 @@ const styles = StyleSheet.create({
   flowRhythmSelectedTime: {
     position: 'absolute',
     bottom: 0,
+    width: 48,
+    left: '50%',
+    marginLeft: -24,
     fontSize: 11,
     fontWeight: '700',
     color: notebook.inkMuted,

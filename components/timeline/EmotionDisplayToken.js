@@ -18,6 +18,8 @@ export default function EmotionDisplayToken({
   onPress,
   size = 'sm',
   showTime = true,
+  /** Optional display-only override (e.g. `07:--` for past hour slot). */
+  timeText = null,
   accessibilityLabel,
   /** Strip away extra min touch width for inline / modal display rows */
   compact = false,
@@ -45,7 +47,7 @@ export default function EmotionDisplayToken({
     <>
       {circle}
       {showTime && createdAt ? (
-        <Text style={[styles.time, { fontSize: dim.timeFont }]}>{formatEntryTime(createdAt)}</Text>
+        <Text style={[styles.time, { fontSize: dim.timeFont }]}>{timeText ?? formatEntryTime(createdAt)}</Text>
       ) : null}
     </>
   );

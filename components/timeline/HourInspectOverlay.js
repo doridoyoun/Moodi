@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import EmotionDisplayToken from './EmotionDisplayToken';
-import { formatEntryTime, splitMemo } from '../../utils/timelineEntryFormat';
+import { formatEntryDisplayTime, splitMemo } from '../../utils/timelineEntryFormat';
 import { notebook } from '../../constants/theme';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -85,18 +85,22 @@ export default function HourInspectOverlay({
                   hScrollRef.current?.scrollToEnd({ animated: false });
                 }}
               >
-                {emotionEntriesChronAsc.map((entry) => (
-                  <View key={entry.id} style={styles.emotionTokenSlot}>
-                    <EmotionDisplayToken
-                      emotionId={entry.emotionId}
-                      createdAt={entry.createdAt}
-                      size="sm"
-                      showTime
-                      onPress={() => onSelectEntry(entry.id)}
-                      accessibilityLabel={`${formatEntryTime(entry.createdAt)} 감정 기록`}
-                    />
-                  </View>
-                ))}
+                {emotionEntriesChronAsc.map((entry) => {
+                  const timeText = formatEntryDisplayTime(entry);
+                  return (
+                    <View key={entry.id} style={styles.emotionTokenSlot}>
+                      <EmotionDisplayToken
+                        emotionId={entry.emotionId}
+                        createdAt={entry.createdAt}
+                        size="sm"
+                        showTime
+                        timeText={timeText}
+                        onPress={() => onSelectEntry(entry.id)}
+                        accessibilityLabel={`${timeText} 감정 기록`}
+                      />
+                    </View>
+                  );
+                })}
               </ScrollView>
             )
           ) : memoEntriesNewestFirst.length === 0 ? (
@@ -114,6 +118,7 @@ export default function HourInspectOverlay({
                 const imageUri = typeof entry?.imageUri === 'string' ? entry.imageUri.trim() : '';
                 const hasPhoto = Boolean(imageUri);
                 const isLast = index === memoEntriesNewestFirst.length - 1;
+                const timeText = formatEntryDisplayTime(entry);
                 return (
                   <Pressable
                     key={entry.id}
@@ -124,7 +129,7 @@ export default function HourInspectOverlay({
                       pressed && styles.memoRowPressed,
                     ]}
                     accessibilityRole="button"
-                    accessibilityLabel={`${titleLine}, ${formatEntryTime(entry.createdAt)}`}
+                    accessibilityLabel={`${titleLine}, ${timeText}`}
                   >
                     <EmotionDisplayToken
                       emotionId={entry.emotionId}
@@ -133,7 +138,7 @@ export default function HourInspectOverlay({
                       showTime={false}
                     />
                     <View style={styles.memoRowMid}>
-                      <Text style={styles.memoTime}>{formatEntryTime(entry.createdAt)}</Text>
+                      <Text style={styles.memoTime}>{timeText}</Text>
                       <View style={styles.memoTitleRow}>
                         <Text style={styles.memoTitle} numberOfLines={2} ellipsizeMode="tail">
                           {titleLine}

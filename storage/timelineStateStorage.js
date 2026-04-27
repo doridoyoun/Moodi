@@ -12,6 +12,7 @@ const TIMELINE_BY_DATE_KEY = 'moodi_timeline_by_date_v1';
  * @property {string} createdAt
  * @property {string} [timelineDateKey] YYYY-MM-DD — timeline day (defaults to date of createdAt if absent)
  * @property {number} [timelineHour] 0–23 — timeline hour slot (defaults to hour of createdAt if absent)
+ * @property {boolean} [minuteUnknown] when true, display minutes as unknown (HH:--)
  * @property {string} [imageUri] optional single photo for this entry
  * @property {boolean} [isRepresentativeOverride] when true, this entry is the manual daily representative
  * @property {string} [representativeOverrideAt] ISO time when override was set (tie-break: most recent wins)
@@ -148,7 +149,7 @@ export function formatDateKeyForDisplay(dateKey, locale = 'ko-KR') {
 // --- MoodEntry helpers ---
 
 /**
- * @param {{ id?: string, emotionId?: string, memo?: string, createdAt?: string, timelineDateKey?: string, timelineHour?: number, imageUri?: string, isRepresentativeOverride?: boolean, representativeOverrideAt?: string }} input
+ * @param {{ id?: string, emotionId?: string, memo?: string, createdAt?: string, timelineDateKey?: string, timelineHour?: number, minuteUnknown?: boolean, imageUri?: string, isRepresentativeOverride?: boolean, representativeOverrideAt?: string }} input
  * @returns {MoodEntry}
  */
 export function createMoodEntry(input = {}) {
@@ -176,6 +177,9 @@ export function createMoodEntry(input = {}) {
     input.timelineHour <= 23
   ) {
     entry.timelineHour = Math.floor(input.timelineHour);
+  }
+  if (input.minuteUnknown === true) {
+    entry.minuteUnknown = true;
   }
   if (typeof input.imageUri === 'string' && input.imageUri.trim().length > 0) {
     entry.imageUri = input.imageUri.trim();
@@ -225,6 +229,11 @@ export function rebuildMoodEntry(base, patch = {}) {
   const th = patch.timelineHour !== undefined ? patch.timelineHour : base.timelineHour;
   if (typeof th === 'number' && Number.isFinite(th) && th >= 0 && th <= 23) {
     entry.timelineHour = Math.floor(th);
+  }
+
+  const minuteUnknown = patch.minuteUnknown !== undefined ? patch.minuteUnknown : base.minuteUnknown;
+  if (minuteUnknown === true) {
+    entry.minuteUnknown = true;
   }
 
   let nextUri = base.imageUri;
@@ -323,6 +332,9 @@ export function normalizeMoodEntries(raw) {
       row.timelineHour <= 23
     ) {
       normalized.timelineHour = Math.floor(row.timelineHour);
+    }
+    if (row.minuteUnknown === true) {
+      normalized.minuteUnknown = true;
     }
     if (typeof row.imageUri === 'string' && row.imageUri.trim().length > 0) {
       normalized.imageUri = row.imageUri.trim();

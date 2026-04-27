@@ -28,6 +28,16 @@ export function formatEntryTime(iso) {
   return `${h}:${m}`;
 }
 
+export function formatEntryDisplayTime(entry) {
+  if (!entry) return '';
+  if (entry.minuteUnknown === true) {
+    const h = typeof entry?.hour === 'number' ? entry.hour : typeof entry?.timelineHour === 'number' ? entry.timelineHour : null;
+    if (typeof h === 'number' && Number.isFinite(h) && h >= 0 && h <= 23) return `${String(Math.floor(h)).padStart(2, '0')}:--`;
+  }
+  if (typeof entry?.createdAt === 'string') return formatEntryTime(entry.createdAt);
+  return '';
+}
+
 export function paletteFor(emotionId) {
   const base = moodPalette[emotionId] ? { ...moodPalette[emotionId] } : { ...moodPalette.happy };
   const o = timelineSlotOverrides[emotionId];

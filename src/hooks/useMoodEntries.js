@@ -29,12 +29,19 @@ export function useMoodEntries({ entries, setEntries, selectedDate, setSelectedD
   const createEntry = useCallback(({ emotionId, memo = '', dateKey, hour, imageUri } = {}) => {
     const p = parseDateKey(dateKey);
     if (!p) return null;
+    const todayKey = toDateKey(new Date());
+    const nowHour = new Date().getHours();
+    const minuteUnknown =
+      typeof hour === 'number' && Number.isFinite(hour)
+        ? !(dateKey === todayKey && Math.floor(hour) === nowHour)
+        : false;
     const input = {
       emotionId,
       memo: typeof memo === 'string' ? memo : '',
       createdAt: new Date().toISOString(),
       timelineDateKey: dateKey,
       timelineHour: hour,
+      ...(minuteUnknown ? { minuteUnknown: true } : {}),
     };
     if (typeof imageUri === 'string' && imageUri.trim().length > 0) {
       input.imageUri = imageUri.trim();
