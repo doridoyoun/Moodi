@@ -19,7 +19,7 @@
       }
     },
     "android": {
-      "package": "com.doyun.moodi",
+      "package": "com.doyoun.moodi",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
