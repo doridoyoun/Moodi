@@ -1,15 +1,13 @@
 import {
-  Dimensions,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
-
-const { height: WINDOW_H } = Dimensions.get('window');
 
 /**
  * Structural shell only: Modal, dim backdrop, optional keyboard avoidance,
@@ -37,12 +35,13 @@ export default function BaseKeyboardSafeModal({
   scrollStyle,
   bounces = false,
 }) {
+  const { height: windowHeight } = useWindowDimensions();
   const bottomPad = Math.max(bottomInset, 12);
   const dismiss = onBackdropPress ?? onRequestClose;
 
   const maxBodyH =
     typeof maxHeightRatio === 'number' && maxHeightRatio > 0 && maxHeightRatio <= 1
-      ? WINDOW_H * maxHeightRatio
+      ? windowHeight * maxHeightRatio
       : undefined;
 
   const hostBase = variant === 'bottom-sheet' ? styles.hostBottomSheet : styles.hostCentered;
@@ -64,7 +63,7 @@ export default function BaseKeyboardSafeModal({
         styles.directHost,
         variant === 'centered' && styles.directHostCentered,
         variant === 'bottom-sheet' && styles.directHostBottom,
-        maxBodyH != null ? { maxHeight: maxBodyH } : { maxHeight: WINDOW_H * 0.8 },
+        maxBodyH != null ? { maxHeight: maxBodyH } : { maxHeight: windowHeight * 0.8 },
         { paddingBottom: bottomPad },
       ]}
     >
@@ -76,7 +75,7 @@ export default function BaseKeyboardSafeModal({
     <ScrollView
       style={[
         styles.scroll,
-        maxBodyH != null ? { maxHeight: maxBodyH } : { maxHeight: WINDOW_H * 0.8 },
+        maxBodyH != null ? { maxHeight: maxBodyH } : { maxHeight: windowHeight * 0.8 },
         scrollStyle,
       ]}
       contentContainerStyle={scrollContentStyle}

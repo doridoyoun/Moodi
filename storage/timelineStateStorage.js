@@ -244,6 +244,7 @@ export function rebuildMoodEntry(base, patch = {}) {
         : undefined;
   }
   if (nextUri) entry.imageUri = nextUri;
+  if (patch.keepPhotoCard ?? base.keepPhotoCard) entry.keepPhotoCard = true;
 
   if (patch.isRepresentativeOverride === true) {
     entry.isRepresentativeOverride = true;
@@ -339,6 +340,7 @@ export function normalizeMoodEntries(raw) {
     if (typeof row.imageUri === 'string' && row.imageUri.trim().length > 0) {
       normalized.imageUri = row.imageUri.trim();
     }
+    if (row.keepPhotoCard === true) normalized.keepPhotoCard = true;
     if (row.isRepresentativeOverride === true) {
       normalized.isRepresentativeOverride = true;
       if (

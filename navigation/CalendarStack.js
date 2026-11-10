@@ -19,7 +19,7 @@ export default function CalendarStack() {
         name="DailyAnalysis"
         component={DailyAnalysisScreen}
         options={{
-          title: '하루 분석',
+          title: '이날의 기록',
           headerShown: true,
           headerShadowVisible: false,
           headerStyle: { backgroundColor: notebook.bg },

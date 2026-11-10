@@ -1,8 +1,9 @@
 import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Calendar, Clock } from 'lucide-react-native';
+import { Calendar, Clock, Images } from 'lucide-react-native';
 import CalendarStack from './CalendarStack';
+import MemoPhotosScreen from '../screens/MemoPhotosScreen';
 import TimelineScreen from '../screens/TimelineScreen';
 import { notebook } from '../constants/theme';
 
@@ -51,6 +52,16 @@ export default function MainTabs() {
         options={{
           tabBarIcon: ({ color }) => (
             <Clock color={color} size={TAB_ICON_SIZE} strokeWidth={2} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="MemoPhotos"
+        component={MemoPhotosScreen}
+        options={{
+          tabBarAccessibilityLabel: '사진 모아보기',
+          tabBarIcon: ({ color }) => (
+            <Images color={color} size={TAB_ICON_SIZE} strokeWidth={2} />
           ),
         }}
       />

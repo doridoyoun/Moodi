@@ -1,3 +1,4 @@
+import { pickMemoPhoto } from '../../utils/pickMemoPhoto';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Image,
@@ -9,8 +10,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
 import { CloudRain, Flame, Heart, Leaf, Smile, X } from 'lucide-react-native';
 import CenteredKeyboardFormModal from '../CenteredKeyboardFormModal';
 import { moodOrder, moodPalette, notebook } from '../../constants/theme';
@@ -42,52 +41,30 @@ export default function EntryDetailModalCard({
   detailEditContent,
   setDetailEditContent,
   bottomInset,
-  dateKey,
   onClose,
   onRequestClose,
   onBeginEdit,
   onCancelEdit,
   onSaveEdit,
   onConfirmDelete,
-  setRepresentativeOverrideForDate,
   detailEditImageUri,
   setDetailEditImageUri,
 }) {
   const [viewPhotoFailed, setViewPhotoFailed] = useState(false);
   const [editPhotoFailed, setEditPhotoFailed] = useState(false);
-  const [manageExpanded, setManageExpanded] = useState(false);
 
   const split = entry ? splitMemo(entry.memo) : { title: '', content: '' };
-  const pal = entry ? moodPalette[entry.emotionId] ?? moodPalette.happy : moodPalette.happy;
-  const emotionLabel = entry ? pal.label : '';
   const timeText = formatEntryDisplayTime(entry);
 
   const pickPhoto = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [3, 4],
-      quality: 0.9,
-    });
-    if (result.canceled) return;
-    const asset = result.assets?.[0];
-    const uri = asset?.uri;
-    if (typeof uri !== 'string' || uri.trim().length === 0) return;
-
     try {
-      const w = typeof asset?.width === 'number' ? asset.width : null;
-      const actions = w && w > 800 ? [{ resize: { width: 800 } }] : [];
-      const manipulated = await ImageManipulator.manipulateAsync(uri, actions, {
-        compress: 0.8,
-        format: ImageManipulator.SaveFormat.JPEG,
-      });
-      const nextUri = typeof manipulated?.uri === 'string' && manipulated.uri.trim().length > 0 ? manipulated.uri : uri;
-      setDetailEditImageUri?.(nextUri);
-    } catch (e) {
-      console.log('IMAGE MANIPULATE ERROR:', e);
-      setDetailEditImageUri?.(uri);
+      const uri = await pickMemoPhoto();
+      if (uri) {
+        setEditPhotoFailed(false);
+        setDetailEditImageUri?.(uri);
+      }
+    } catch {
+      setEditPhotoFailed(true);
     }
   }, [setDetailEditImageUri]);
 
@@ -97,11 +74,6 @@ export default function EntryDetailModalCard({
 
   const viewPhotoUri = useMemo(() => normalizeImageUri(entry?.imageUri), [entry?.imageUri]);
   const editPhotoUri = useMemo(() => normalizeImageUri(detailEditImageUri), [detailEditImageUri]);
-  const entryDateKey = useMemo(() => {
-    const dk = typeof entry?.timelineDateKey === 'string' ? entry.timelineDateKey : '';
-    if (dk) return dk;
-    return typeof dateKey === 'string' ? dateKey : '';
-  }, [dateKey, entry?.timelineDateKey]);
 
   useEffect(() => {
     setViewPhotoFailed(false);
@@ -110,10 +82,6 @@ export default function EntryDetailModalCard({
   useEffect(() => {
     setEditPhotoFailed(false);
   }, [editPhotoUri]);
-
-  useEffect(() => {
-    setManageExpanded(false);
-  }, [visible, entry?.id, isDetailEditing]);
 
   return (
     <CenteredKeyboardFormModal
@@ -127,15 +95,17 @@ export default function EntryDetailModalCard({
       keyboardAware={false}
     >
       <View style={styles.card} pointerEvents="auto">
-        <Pressable
-          onPress={onClose}
-          style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.75 }]}
-          accessibilityRole="button"
-          accessibilityLabel="닫기"
-          hitSlop={12}
-        >
-          <X size={22} color={notebook.inkMuted} strokeWidth={2} />
-        </Pressable>
+        {!entry || isDetailEditing ? (
+          <Pressable
+            onPress={onClose}
+            style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.75 }]}
+            accessibilityRole="button"
+            accessibilityLabel="닫기"
+            hitSlop={12}
+          >
+            <X size={22} color={notebook.inkMuted} strokeWidth={2} />
+          </Pressable>
+        ) : null}
 
         {entry && isDetailEditing ? (
           <View style={styles.editHeader}>
@@ -175,29 +145,37 @@ export default function EntryDetailModalCard({
         >
           {entry && !isDetailEditing ? (
             <View style={styles.bodyBlock}>
-              <View style={styles.viewMeta}>
-                <EmotionDisplayToken emotionId={entry.emotionId} size="detail" showTime={false} compact />
-                <View style={styles.viewMetaText}>
-                  <Text style={[styles.emotionLabel, { color: pal.ink }]}>{emotionLabel}</Text>
-                  <Text style={styles.timeText}>{timeText}</Text>
-                </View>
+              <View style={styles.memoRow}>
+                <EmotionDisplayToken emotionId={entry.emotionId} size="sm" showTime={false} compact />
+                <Text style={styles.timeText}>{timeText}</Text>
+                {split.title ? <Text style={styles.title}>{split.title}</Text> : <View style={styles.memoTitleSpacer} />}
+                  <Pressable
+                    onPress={onClose}
+                    style={({ pressed }) => [styles.memoCloseBtn, pressed && { opacity: 0.75 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="닫기"
+                    hitSlop={12}
+                  >
+                    <X size={22} color={notebook.inkMuted} strokeWidth={2} />
+                  </Pressable>
               </View>
-              {split.title ? <Text style={styles.title}>{split.title}</Text> : null}
               {split.content ? (
                 <Text style={styles.bodyText}>{split.content}</Text>
-              ) : !split.title ? (
+              ) : !split.title && !viewPhotoUri ? (
                 <Text style={styles.bodyMuted}>(내용 없음)</Text>
               ) : null}
               {viewPhotoUri && !viewPhotoFailed ? (
                 <Image
                   source={{ uri: viewPhotoUri }}
                   style={styles.viewPhoto}
-                  resizeMode="cover"
+                  resizeMode="contain"
                   onError={() => {
                     console.log('IMAGE ERROR:', viewPhotoUri);
                     setViewPhotoFailed(true);
                   }}
                 />
+              ) : viewPhotoUri ? (
+                <Text style={styles.bodyMuted}>사진을 열 수 없어요. 수정에서 다시 첨부해 주세요.</Text>
               ) : null}
             </View>
           ) : null}
@@ -226,16 +204,18 @@ export default function EntryDetailModalCard({
                 <Image
                   source={{ uri: editPhotoUri }}
                   style={styles.editPhoto}
-                  resizeMode="cover"
+                  resizeMode="contain"
                   onError={() => {
                     console.log('IMAGE ERROR:', editPhotoUri);
                     setEditPhotoFailed(true);
                   }}
                 />
               ) : null}
+              {editPhotoFailed ? <Text style={styles.photoHint}>사진을 불러올 수 없어요. 다시 선택해 주세요.</Text> : null}
               <View style={styles.photoActions}>
                 <Pressable
                   style={({ pressed }) => [styles.photoBtn, pressed && { opacity: 0.85 }]}
+                  hitSlop={7}
                   onPress={pickPhoto}
                   accessibilityRole="button"
                   accessibilityLabel="사진 선택"
@@ -245,6 +225,7 @@ export default function EntryDetailModalCard({
                 {editPhotoUri ? (
                   <Pressable
                     style={({ pressed }) => [styles.photoBtnSecondary, pressed && { opacity: 0.85 }]}
+                    hitSlop={7}
                     onPress={clearPhoto}
                     accessibilityRole="button"
                     accessibilityLabel="사진 삭제"
@@ -258,59 +239,31 @@ export default function EntryDetailModalCard({
         </ScrollView>
 
         {entry ? (
-          <View style={[styles.footer, { paddingBottom: Math.max(bottomInset ?? 0, 16) }]}>
+          <View style={[styles.footer, !isDetailEditing && styles.viewFooter, { paddingBottom: Math.max(bottomInset ?? 0, isDetailEditing ? 16 : 4) }]}>
             {!isDetailEditing ? (
-              <View style={styles.manageWrap}>
+              <View style={styles.manageActions}>
                 <Pressable
-                  style={({ pressed }) => [styles.manageBtn, pressed && { opacity: 0.88 }]}
-                  onPress={() => setManageExpanded((v) => !v)}
+                  style={({ pressed }) => [styles.manageActionItem, pressed && { opacity: 0.85 }]}
+                  onPress={() => {
+                    onBeginEdit?.();
+                  }}
                   accessibilityRole="button"
-                  accessibilityLabel="이 기록 관리하기"
+                  accessibilityLabel="수정"
                 >
-                  <Text style={styles.manageBtnText}>이 기록 관리하기</Text>
+                  <Text style={styles.manageActionText}>수정</Text>
                 </Pressable>
 
-                {manageExpanded ? (
-                  <View style={styles.manageActions}>
-                    <Pressable
-                      style={({ pressed }) => [styles.manageActionItem, pressed && { opacity: 0.85 }]}
-                      onPress={() => {
-                        setManageExpanded(false);
-                        onBeginEdit?.();
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel="수정"
-                    >
-                      <Text style={styles.manageActionText}>수정</Text>
-                    </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.manageActionItem, pressed && { opacity: 0.85 }]}
+                  onPress={() => {
+                    if (entry?.id) onConfirmDelete?.(entry.id);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="삭제"
+                >
+                  <Text style={[styles.manageActionText, styles.manageDangerText]}>삭제</Text>
+                </Pressable>
 
-                    <Pressable
-                      style={({ pressed }) => [styles.manageActionItem, pressed && { opacity: 0.85 }]}
-                      onPress={() => {
-                        setManageExpanded(false);
-                        if (entry?.id) onConfirmDelete?.(entry.id);
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel="삭제"
-                    >
-                      <Text style={[styles.manageActionText, styles.manageDangerText]}>삭제</Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={({ pressed }) => [styles.manageActionItem, pressed && { opacity: 0.85 }]}
-                      onPress={() => {
-                        if (!entry?.id) return;
-                        if (!entryDateKey) return;
-                        setRepresentativeOverrideForDate?.(entryDateKey, entry.id);
-                        setManageExpanded(false);
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel="오늘의 한 줄로 선택"
-                    >
-                      <Text style={styles.manageActionText}>오늘의 한 줄로 선택</Text>
-                    </Pressable>
-                  </View>
-                ) : null}
               </View>
             ) : (
               <>
@@ -343,7 +296,7 @@ export default function EntryDetailModalCard({
 
 const styles = StyleSheet.create({
   card: {
-    width: '100%',
+    width: '92%',
     maxWidth: 400,
     borderRadius: 22,
     backgroundColor: '#fff',
@@ -377,45 +330,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bodyBlock: {
-    paddingTop: 44,
+    paddingTop: 12,
     paddingHorizontal: 18,
-    paddingBottom: 12,
   },
   bodyEdit: {
     paddingHorizontal: 18,
     paddingBottom: 12,
   },
-  viewMeta: {
-    flexDirection: 'row',
+  memoCloseBtn: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 14,
-  },
-  viewMetaText: {
-    flex: 1,
-    minWidth: 0,
     justifyContent: 'center',
   },
-  emotionLabel: {
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: -0.15,
+  memoTitleSpacer: {
+    flex: 1,
+  },
+  memoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   timeText: {
-    marginTop: 3,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
-    color: notebook.inkLight,
+    color: notebook.inkMuted,
     fontVariant: ['tabular-nums'],
   },
   title: {
-    fontSize: 20,
+    flex: 1,
+    minWidth: 0,
+    fontSize: 16,
     fontWeight: '700',
+    lineHeight: 22,
     color: notebook.ink,
-    lineHeight: 28,
-    marginBottom: 12,
   },
   bodyText: {
+    marginTop: 8,
     fontSize: 15,
     lineHeight: 24,
     color: notebook.ink,
@@ -436,36 +387,21 @@ const styles = StyleSheet.create({
     borderTopColor: notebook.gridLine,
     backgroundColor: '#fff',
   },
-  manageWrap: {
-    flex: 1,
-  },
-  manageBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: notebook.gridLine,
-    backgroundColor: notebook.bg,
-  },
-  manageBtnText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: notebook.inkMuted,
+  viewFooter: {
+    paddingTop: 0,
   },
   manageActions: {
-    marginTop: 10,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: notebook.gridLine,
-    backgroundColor: '#fff',
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 4,
   },
   manageActionItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: notebook.gridLine,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   manageActionText: {
     fontSize: 14,
@@ -576,12 +512,13 @@ const styles = StyleSheet.create({
   },
   viewPhoto: {
     width: '100%',
-    aspectRatio: 3 / 4,
+    height: 180,
     borderRadius: 16,
     marginTop: 14,
     backgroundColor: notebook.bg,
   },
   photoHint: {
+    textAlign: 'center',
     marginTop: 10,
     marginBottom: 8,
     fontSize: 12,
@@ -589,23 +526,25 @@ const styles = StyleSheet.create({
     color: notebook.inkLight,
   },
   editPhoto: {
-    width: 130,
-    aspectRatio: 3 / 4,
+    width: 104,
+    maxWidth: '100%',
+    height: 96,
     borderRadius: 12,
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     marginTop: 12,
     marginBottom: 10,
     backgroundColor: notebook.bg,
   },
   photoActions: {
+    justifyContent: 'center',
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
     marginBottom: 4,
   },
   photoBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
     borderRadius: 10,
     backgroundColor: notebook.ink,
   },
@@ -615,8 +554,8 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   photoBtnSecondary: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: notebook.gridLine,

@@ -206,7 +206,6 @@ export default function TimelineScreen() {
     updateEntry,
     deleteEntry,
     registerEmotionToastAfterLog,
-    setRepresentativeOverrideForDate,
   } = useMood();
 
   const [activeHour, setActiveHour] = useState(null);
@@ -234,8 +233,6 @@ export default function TimelineScreen() {
   const firstGuideActiveRef = useRef(false);
   const [firstFollowUpVisible, setFirstFollowUpVisible] = useState(false);
   const firstFollowUpEntryIdRef = useRef(null);
-  const pulseScale = useRef(new Animated.Value(1)).current;
-  const pulseLoopRef = useRef(null);
 
   const flashEmotionToast = useCallback((message) => {
     if (emotionToastTimerRef.current) {
@@ -293,30 +290,6 @@ export default function TimelineScreen() {
   useEffect(() => {
     setSelectedTimelineHour(null);
   }, [selectedDate]);
-
-  useEffect(() => {
-    if (!firstGuideActive || !isToday || isFutureDateView) {
-      pulseScale.setValue(1);
-      if (pulseLoopRef.current) {
-        pulseLoopRef.current.stop();
-        pulseLoopRef.current = null;
-      }
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseScale, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
-        Animated.timing(pulseScale, { toValue: 1, duration: 1000, useNativeDriver: true }),
-      ]),
-    );
-    pulseLoopRef.current = loop;
-    loop.start();
-    return () => {
-      loop.stop();
-      pulseLoopRef.current = null;
-      pulseScale.setValue(1);
-    };
-  }, [firstGuideActive, isToday, isFutureDateView, pulseScale]);
 
   useEffect(() => {
     dailySummaryOpacity.setValue(0);
@@ -408,14 +381,6 @@ export default function TimelineScreen() {
       closeDetailModal();
     }
   }, [cancelDetailEdit, closeDetailModal, isDetailEditing]);
-
-  const onToggleRepresentativeOverride = useCallback(
-    (next) => {
-      if (!detailEntry) return;
-      setRepresentativeOverrideForDate(detailEntry.id, selectedDate, next);
-    },
-    [detailEntry, selectedDate, setRepresentativeOverrideForDate],
-  );
 
   const confirmDeleteEntry = useCallback(
     (id) => {
@@ -759,7 +724,6 @@ export default function TimelineScreen() {
               overlayVisible={overlayVisible}
               activeHour={activeHour}
               overlayMode={overlayMode}
-              onOpenEmotionInspect={() => openEntryOverlayForHour(hour, 'emotion')}
               onOpenMemoInspect={() => openEntryOverlayForHour(hour, 'memo')}
               onLayoutHour={(y, height) => {
                 hourYRef.current[hour] = y;
@@ -857,11 +821,10 @@ export default function TimelineScreen() {
                 </View>
               </View>
             ) : null}
-            <Animated.View
+            <View
               style={[
                 styles.quickEmotionRow,
                 isFutureDateView && styles.quickEmotionRowDisabled,
-                firstGuideActive && isToday && !isFutureDateView ? { transform: [{ scale: pulseScale }] } : null,
               ]}
             >
               {moodOrder.map((key) => {
@@ -885,7 +848,7 @@ export default function TimelineScreen() {
                   </Pressable>
                 );
               })}
-            </Animated.View>
+            </View>
           </View>
         </View>
       </View>
@@ -907,8 +870,6 @@ export default function TimelineScreen() {
         onCancelEdit={cancelDetailEdit}
         onSaveEdit={saveDetailEdit}
         onConfirmDelete={confirmDeleteEntry}
-        isRepresentativeOverride={detailEntry?.isRepresentativeOverride === true}
-        onToggleRepresentativeOverride={onToggleRepresentativeOverride}
         detailEditImageUri={detailEditImageUri}
         setDetailEditImageUri={setDetailEditImageUri}
       />
@@ -922,7 +883,6 @@ function HourRowBlock({
   overlayVisible,
   activeHour,
   overlayMode,
-  onOpenEmotionInspect,
   onOpenMemoInspect,
   onLayoutHour,
   slotSelected,
@@ -969,11 +929,9 @@ function HourRowBlock({
       {n > 0 ? (
         <View style={styles.hourEntryActionsWrap}>
           <HourEntryActions
-            entryCount={n}
             memoCount={memoCount}
             inspectOpen={inspectOpen}
             inspectMode={inspectOpen ? overlayMode : null}
-            onPressEmotion={onOpenEmotionInspect}
             onPressMemo={onOpenMemoInspect}
           />
         </View>

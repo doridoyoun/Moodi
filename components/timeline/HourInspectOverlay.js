@@ -43,10 +43,6 @@ export default function HourInspectOverlay({
   }
 
   const heading = `${String(activeHour).padStart(2, '0')}:00`;
-  const sub =
-    overlayMode === 'emotion'
-      ? '이 시간에 남긴 감정'
-      : '제목이 있는 메모';
 
   return (
     <View style={styles.root} pointerEvents="box-none">
@@ -63,12 +59,12 @@ export default function HourInspectOverlay({
             },
           ]}
         >
-          <View style={styles.cardHeader}>
-            <View>
+          {overlayMode === 'emotion' ? (
+            <View style={styles.cardHeader}>
               <Text style={styles.heading}>{heading}</Text>
-              <Text style={styles.sub}>{sub}</Text>
+              <Text style={styles.sub}>이 시간에 남긴 감정</Text>
             </View>
-          </View>
+          ) : null}
 
           {overlayMode === 'emotion' ? (
             emotionEntriesChronAsc.length === 0 ? (

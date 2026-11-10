@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Surface } from 'react-native-paper';
@@ -55,9 +55,18 @@ function dateKeyForDay(year, monthIndex, day) {
 
 export default function CalendarScreen() {
   const navigation = useNavigation();
+  const { width } = useWindowDimensions();
   const { entries, selectedDate, setSelectedDate, setRepresentativeOverrideForDate } = useMood();
   const [cursor, setCursor] = useState(() => new Date());
   const [oneLinePickerVisible, setOneLinePickerVisible] = useState(false);
+  const [calendarViewportHeight, setCalendarViewportHeight] = useState(0);
+  const isWide = width >= 600;
+  const wideSpace = Math.max(0, calendarViewportHeight - 620);
+  const cellHeight = isWide ? 48 + Math.min(58, wideSpace / 6) : 38;
+  const dayFontSize = isWide ? 18 : 13;
+  const detailSpacing = isWide
+    ? Math.min(24, wideSpace / 15)
+    : Math.min(12, Math.max(0, (calendarViewportHeight - 550) / 12));
 
   useEffect(() => {
     const p = parseDateKey(selectedDate);
@@ -191,7 +200,7 @@ export default function CalendarScreen() {
         case 'flutter':
           return '뒤로 갈수록 설렘이 남은 하루였어요';
         case 'calm':
-          return '중간부터 감정이 안정된 하루였어요';
+          return '하루 중반부터 마음이 한결 평온했어요';
         case 'gloom':
           return '뒤로 갈수록 마음이 조금 가라앉은 하루였어요';
         case 'annoyed':
@@ -297,13 +306,17 @@ export default function CalendarScreen() {
 
   return (
     <NotebookLayout>
-      <View style={styles.root}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        onLayout={(event) => setCalendarViewportHeight(event.nativeEvent.layout.height)}
+      >
         <View style={styles.titleRow}>
           <Text style={styles.emoji}>📅</Text>
-          <Text style={styles.pageTitle}>Mood Calendar</Text>
+          <Text style={[styles.pageTitle, isWide && styles.widePageTitle]}>Mood Calendar</Text>
         </View>
 
-        <Surface style={styles.card} elevation={2}>
+        <Surface style={[styles.card, isWide && styles.wideCard]} elevation={2}>
           <View style={styles.monthRow}>
             <Pressable
               onPress={() => shiftMonth(-1)}
@@ -313,7 +326,7 @@ export default function CalendarScreen() {
             >
               <ChevronLeft size={22} color={notebook.inkMuted} />
             </Pressable>
-            <Text style={styles.monthText}>{monthLabel}</Text>
+            <Text style={[styles.monthText, isWide && styles.wideMonthText]}>{monthLabel}</Text>
             <Pressable
               onPress={() => shiftMonth(1)}
               hitSlop={8}
@@ -326,7 +339,7 @@ export default function CalendarScreen() {
 
           <View style={styles.weekRow}>
             {WEEKDAYS.map((w) => (
-              <Text key={w} style={styles.weekday}>
+              <Text key={w} style={[styles.weekday, isWide && styles.wideWeekday]}>
                 {w}
               </Text>
             ))}
@@ -362,6 +375,7 @@ export default function CalendarScreen() {
                     onPress={() => onPressDayCell(day)}
                     style={({ pressed }) => [
                       styles.dayCell,
+                      { minHeight: cellHeight },
                       isTodayCell && !isSelectedCell && styles.dayCellToday,
                       isSelectedCell && styles.dayCellSelected,
                       pressed && styles.dayPressActive,
@@ -378,7 +392,7 @@ export default function CalendarScreen() {
                     <Text
                       style={[
                         styles.dayText,
-                        { color: topTwo.length ? notebook.ink : notebook.inkMuted },
+                        { color: topTwo.length ? notebook.ink : notebook.inkMuted, fontSize: dayFontSize },
                         isSelectedCell && styles.dayTextSelected,
                       ]}
                     >
@@ -390,12 +404,11 @@ export default function CalendarScreen() {
             })}
           </View>
 
-          <View style={styles.selectedDetail}>
+          <View style={[styles.selectedDetail, selectedDayEmotionTotal > 0 && { paddingTop: 10 + detailSpacing }]}>
             {selectedDayEmotionTotal === 0 ? (
               <Text style={styles.selectedEmpty}>아직 이 날의 기록이 없어요</Text>
             ) : (
               <View style={styles.previewBarWrap}>
-                <Text style={styles.previewBarLabel}>감정 비율</Text>
                 <View style={styles.previewBarRow}>
                   {moodOrder.map((emotionId) => {
                     const n = selectedDayEmotionCounts[emotionId] ?? 0;
@@ -418,26 +431,15 @@ export default function CalendarScreen() {
           </View>
 
           {selectedDayEmotionTotal > 0 ? (
-            <View style={styles.calendarSummaryWrap}>
-              <Text style={styles.calendarSummaryText}>{summaryText}</Text>
+            <View style={[styles.calendarSummaryWrap, { marginTop: 6 + detailSpacing }]}>
+              <Text style={[styles.calendarSummaryText, isWide && styles.wideDetailText]}>{summaryText}</Text>
             </View>
           ) : null}
 
           {selectedDayEmotionTotal > 0 ? (
             <Pressable
-              onPress={() => navigation.navigate('DailyAnalysis')}
-              style={({ pressed }) => [styles.analysisEntry, pressed && styles.analysisEntryPressed]}
-              accessibilityRole="button"
-              accessibilityLabel="선택한 날 하루 분석"
-            >
-              <Text style={styles.analysisEntryText}>하루 분석 보기</Text>
-            </Pressable>
-          ) : null}
-
-          {selectedDayEmotionTotal > 0 ? (
-            <Pressable
               onPress={() => setOneLinePickerVisible(true)}
-              style={({ pressed }) => [styles.repCardWrap, pressed && { opacity: 0.92 }]}
+              style={({ pressed }) => [styles.repCardWrap, { marginTop: 8 + detailSpacing }, pressed && { opacity: 0.92 }]}
               accessibilityRole="button"
               accessibilityLabel="오늘의 한 줄 선택"
             >
@@ -448,17 +450,28 @@ export default function CalendarScreen() {
 
               {hasRepresentativeMemo ? (
                 repCardTitle ? (
-                  <Text style={styles.repCardTitle} numberOfLines={2}>
+                  <Text style={[styles.repCardTitle, isWide && styles.wideMemoTitle]} numberOfLines={2}>
                     {repCardTitle}
                   </Text>
                 ) : null
               ) : repEmotionId ? (
-                <Text style={styles.repCardTitle} numberOfLines={2}>
+                <Text style={[styles.repCardTitle, isWide && styles.wideMemoTitle]} numberOfLines={2}>
                   {repEmotionFallbackText}
                 </Text>
               ) : (
                 <Text style={styles.repEmptyText}>오늘의 한 줄을 선택해보세요</Text>
               )}
+            </Pressable>
+          ) : null}
+
+          {selectedDayEmotionTotal > 0 ? (
+            <Pressable
+              onPress={() => navigation.navigate('DailyAnalysis')}
+              style={({ pressed }) => [styles.analysisEntry, { marginTop: 10 + detailSpacing }, pressed && styles.analysisEntryPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="기록 자세히 보기"
+            >
+              <Text style={styles.analysisEntryText}>기록 자세히 보기</Text>
             </Pressable>
           ) : null}
 
@@ -518,17 +531,28 @@ export default function CalendarScreen() {
             })}
           </View>
         </Surface>
-      </View>
+      </ScrollView>
     </NotebookLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  scroll: {
     flex: 1,
+  },
+  content: {
+    width: '100%',
+    maxWidth: 960,
+    alignSelf: 'center',
     paddingHorizontal: 20,
     paddingBottom: 12,
   },
+  widePageTitle: { fontSize: 25 },
+  wideCard: { paddingHorizontal: 20, paddingVertical: 18 },
+  wideMonthText: { fontSize: 23 },
+  wideWeekday: { fontSize: 15 },
+  wideDetailText: { fontSize: 17, lineHeight: 25 },
+  wideMemoTitle: { fontSize: 19, lineHeight: 27 },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -587,7 +611,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dayCell: {
-    minHeight: 38,
     borderRadius: 10,
     overflow: 'hidden',
     alignItems: 'center',
@@ -610,7 +633,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     zIndex: 2,
     textAlign: 'center',
-    fontSize: 13,
     fontWeight: '700',
   },
   dayTextSelected: {
@@ -632,13 +654,6 @@ const styles = StyleSheet.create({
   previewBarWrap: {
     minWidth: 0,
   },
-  previewBarLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: notebook.inkLight,
-    marginBottom: 4,
-    textAlign: 'left',
-  },
   previewBarRow: {
     flexDirection: 'row',
     height: 18,
@@ -646,7 +661,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(15, 23, 42, 0.08)',
-    marginBottom: 12,
   },
   previewSegment: {
     minWidth: 0,
@@ -659,9 +673,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(15, 23, 42, 0.08)',
   },
   calendarSummaryWrap: {
-    marginTop: 10,
-    marginBottom: 10,
-    paddingHorizontal: 4,
+    marginTop: 6,
   },
   calendarSummaryText: {
     fontSize: 14,
@@ -690,7 +702,7 @@ const styles = StyleSheet.create({
     color: notebook.inkMuted,
   },
   repCardWrap: {
-    marginTop: 12,
+    marginTop: 8,
     borderRadius: 16,
     backgroundColor: '#fff',
     borderWidth: StyleSheet.hairlineWidth,
@@ -701,7 +713,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 4,
   },
   repCardEmotion: {
     fontSize: 13,

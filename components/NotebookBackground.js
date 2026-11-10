@@ -1,22 +1,23 @@
-import { Dimensions, StyleSheet, View } from 'react-native';
+import { memo } from 'react';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { notebook } from '../constants/theme';
 
-const { width: W, height: H } = Dimensions.get('window');
 const ROW_STEP = 14;
 const COL_STEP = 14;
-const ROWS = Math.ceil(H / ROW_STEP) + 2;
-const COLS = Math.ceil(W / COL_STEP) + 2;
 
-export default function NotebookBackground() {
+function NotebookBackground() {
+  const { width, height } = useWindowDimensions();
+  const rows = Math.ceil(height / ROW_STEP) + 2;
+  const cols = Math.ceil(width / COL_STEP) + 2;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {Array.from({ length: ROWS }).map((_, i) => (
+      {Array.from({ length: rows }).map((_, i) => (
         <View
           key={`h-${i}`}
           style={[styles.hLine, { top: (i + 1) * ROW_STEP }]}
         />
       ))}
-      {Array.from({ length: COLS }).map((_, i) => (
+      {Array.from({ length: cols }).map((_, i) => (
         <View
           key={`v-${i}`}
           style={[styles.vLine, { left: (i + 1) * COL_STEP }]}
@@ -25,6 +26,8 @@ export default function NotebookBackground() {
     </View>
   );
 }
+
+export default memo(NotebookBackground);
 
 const styles = StyleSheet.create({
   hLine: {

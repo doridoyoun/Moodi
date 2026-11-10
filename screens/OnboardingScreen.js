@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -130,8 +130,6 @@ function VisualPhotoGrid() {
 export default function OnboardingScreen({ onComplete }) {
   const insets = useSafeAreaInsets();
   const [page, setPage] = useState(0);
-  const { height: windowH } = useWindowDimensions();
-  const pageMinH = Math.max(460, windowH * 0.58);
 
   const finish = useCallback(async () => {
     await onComplete();
@@ -169,13 +167,13 @@ export default function OnboardingScreen({ onComplete }) {
         </Pressable>
       </View>
 
-      <View style={[styles.pager, { minHeight: pageMinH }]}>
-        <View style={styles.page} key={page}>
+      <ScrollView style={styles.pager} contentContainerStyle={styles.pagerContent} key={page}>
+        <View style={styles.page}>
           <AnimatedSlide active>
             <View style={styles.topSpacer} />
             <Text style={styles.headline}>{slide.headline}</Text>
             {slide.sub ? (
-              <Text style={styles.subtext} numberOfLines={2}>
+              <Text style={styles.subtext}>
                 {slide.sub}
               </Text>
             ) : null}
@@ -186,7 +184,7 @@ export default function OnboardingScreen({ onComplete }) {
             </View>
           </AnimatedSlide>
         </View>
-      </View>
+      </ScrollView>
 
       <View style={styles.footer}>
         <View style={styles.dots}>
@@ -235,6 +233,9 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
+  pagerContent: {
+    flexGrow: 1,
+  },
   page: {
     flex: 1,
     paddingHorizontal: 28,
@@ -244,7 +245,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   topSpacer: {
-    height: 56,
+    height: 16,
   },
   headline: {
     fontSize: 24,
@@ -307,7 +308,8 @@ const styles = StyleSheet.create({
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    width: 220,
+    width: '100%',
+    maxWidth: 220,
     gap: 10,
     justifyContent: 'center',
   },
